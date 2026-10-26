@@ -1,7 +1,7 @@
-# Templates Index — all 408 Jitter templates
+# Templates Index — all 408 templates
 
 Columns: slug | title | categories | technique summary.
-View any template at `https://jitter.video/template/<slug>/`.
+Find any template by searching its slug in the source template gallery.
 
 | slug | title | categories | technique |
 |---|---|---|---|
