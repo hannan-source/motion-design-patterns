@@ -1,50 +1,50 @@
 # Charts & Data Patterns
 
-Derived from Jitter's `charts` category (17 templates) plus counter/progress templates
+Derived from the source library's `charts` category (17 templates) plus counter/progress templates
 scattered through `ui-elements` and `social-media`.
 
 ## 1. Growing bars from baseline
 Bars scale from the shared baseline with clean, purposeful timing.
-- **Recipe:** `scaleY: 0→1`, `transformOrigin: bottom`, stagger left→right.
-- **Feel:** power3.out, 0.6–0.8s per bar; "rise and settle" implies a tiny overshoot.
+- **Recipe:** `scaleY: 0â1`, `transformOrigin: bottom`, stagger leftâright.
+- **Feel:** power3.out, 0.6â0.8s per bar; "rise and settle" implies a tiny overshoot.
 - **GSAP:** `gsap.from('.bar', {scaleY:0, transformOrigin:'50% 100%', duration:0.7, ease:'back.out(1.4)', stagger:0.08})`
 - See: animated-bar-chart, bar-chart-skyline, bar-chart-sleep-tracker.
 
 ## 2. Horizontal bars slide-in + expand
-Bars enter sideways, then lengthen to value — leaderboard feel.
-- **Recipe:** `x: -20→0` + `scaleX: 0→value`, origin left; stagger rows.
+Bars enter sideways, then lengthen to value â leaderboard feel.
+- **Recipe:** `x: -20â0` + `scaleX: 0âvalue`, origin left; stagger rows.
 - **GSAP:** `gsap.from('.hbar', {scaleX:0, x:-16, transformOrigin:'0 50%', stagger:0.1, ease:'expo.out'})`
 - See: horizontal-bar-chart-metrics.
 
 ## 3. Multi-series simultaneous build
-Several bar/line series animate at once for comparison — no stagger, synchronized.
+Several bar/line series animate at once for comparison â no stagger, synchronized.
 - **Recipe:** same tween started together; differentiate by color only.
 - **GSAP:** `gsap.from('.series', {scaleY:0, transformOrigin:'bottom', duration:0.9, ease:'power3.out'})`
 - See: multiple-bar-chart, stacked-bar-chart, multiple-line-chart-green.
 
 ## 4. Line draw-on
 A line chart draws itself across the frame.
-- **Recipe:** SVG path `strokeDasharray = len; strokeDashoffset: len→0`.
-- **Feel:** power2.in-out, 1–1.6s; add dot markers popping at data points.
+- **Recipe:** SVG path `strokeDasharray = len; strokeDashoffset: lenâ0`.
+- **Feel:** power2.in-out, 1â1.6s; add dot markers popping at data points.
 - **GSAP:** `gsap.to(path, {strokeDashoffset:0, duration:1.4, ease:'power2.inOut'})`
 - See: animated-line-chart-blue, animated-line-chart-purple, line-chart-user-acquisition.
 
 ## 5. Donut ring sweep
 Ring fills around its circumference to a percentage.
-- **Recipe:** circle stroke, `strokeDashoffset = C*(1-p)→target`; rounded linecap.
+- **Recipe:** circle stroke, `strokeDashoffset = C*(1-p)âtarget`; rounded linecap.
 - **Feel:** expo-out; often paired with a count-up in the center.
 - **GSAP:** `gsap.to(ring, {strokeDashoffset:C*(1-0.72), duration:1.2, ease:'expo.out'})`
 - See: animated-donut-chart, animated-donut-chart-black, progress-donut, progress-pie.
 
 ## 6. Donut segments in sequence
 Multi-part donut: each segment sweeps in after the previous.
-- **Recipe:** per-segment dashoffset tween chained on a timeline; stagger 0.15–0.25.
+- **Recipe:** per-segment dashoffset tween chained on a timeline; stagger 0.15â0.25.
 - **GSAP:** `tl.to(seg1,{...}).to(seg2,{...},'-=0.1').to(seg3,{...},'-=0.1')`
 - See: donut-chart-3-parts, stacked-donut-chart (rings stacked + sequenced).
 
 ## 7. Layered chart cascade
-Chart layers/panels cascade into place one after another — builds anticipation.
-- **Recipe:** per-layer `y:+40→0` + `opacity`, stagger 0.12, slight rotation optional.
+Chart layers/panels cascade into place one after another â builds anticipation.
+- **Recipe:** per-layer `y:+40â0` + `opacity`, stagger 0.12, slight rotation optional.
 - **GSAP:** `gsap.from('.layer', {y:40, opacity:0, stagger:0.12, ease:'power3.out'})`
 - See: stacked-chart-cascade, grid-chart-split (panels split + populate).
 
@@ -62,7 +62,7 @@ Circular progress ring fills while the percentage counts up in sync.
 - See: counter-progress-ring, progress-bar (linear variant), dotted-counter-circle.
 
 ## 10. Radar morph
-A simple line morphs into a full radar chart — the chart is "earned", not just shown.
+A simple line morphs into a full radar chart â the chart is "earned", not just shown.
 - **Recipe:** path `attr:{d}` morph from flat polyline to radar polygon (equal point count).
 - **GSAP:** `gsap.to(path, {attr:{d:radarD}, duration:1, ease:'power3.inOut'})` (same #points; or MorphSVG).
 - See: morph-line-to-radar-chart.
