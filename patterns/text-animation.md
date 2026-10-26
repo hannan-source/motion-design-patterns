@@ -1,6 +1,6 @@
 # Text Animation Patterns
 
-Derived from Jitter's `text` + `video-titles` categories (≈90 templates).
+Derived from the source library's `text` + `video-titles` categories (≈90 templates).
 
 ## 1. Staggered line cascade
 Lines of text fall/rise into place one after another, each landing separately.
