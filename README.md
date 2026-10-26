@@ -1,7 +1,7 @@
-# Jitter Motion-Design Pattern Library
+# Motion-Design Pattern Library
 
 A distilled knowledge base of the recurring motion techniques behind all 408 templates
-in Jitter's library (jitter.video/templates). Each pattern was reverse-engineered from
+in a leading motion-template library. Each pattern was reverse-engineered from
 the template's own description of *what animates and how*, then translated into a
 code-oriented recipe (GSAP / CSS / SVG / canvas) so an AI coding agent can recreate
 premium motion graphics without watching the originals.
@@ -14,11 +14,11 @@ premium motion graphics without watching the originals.
    coding session, e.g. "implement the *Stretch & Snap* pattern from
    patterns/text-animation.md for this headline".
 3. Also attach `MOTION-PRINCIPLES.md` when starting a new scene — it carries the
-   cross-cutting timing/easing/stagger rules that make the result feel "Jitter-grade"
+   cross-cutting timing/easing/stagger rules that make the result feel "premium-grade"
    rather than default-linear.
 4. Every pattern entry has: what animates → which CSS/SVG property → timing/easing
    feel → a concrete GSAP hint → exemplar template slugs for reference
-   (view at `https://jitter.video/template/<slug>/`).
+   (find them by searching the slug in the source template gallery).
 
 ## Pattern files
 
@@ -41,4 +41,4 @@ premium motion graphics without watching the originals.
   feel = `expo.out` / `power3.out`.
 - Durations are given as ranges observed across the catalog's described pacing.
 - Template slugs cited as `see: slug-a, slug-b` resolve to
-  `https://jitter.video/template/<slug>/`.
+  search the slug in the source template gallery.
