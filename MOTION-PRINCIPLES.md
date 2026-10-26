@@ -1,7 +1,7 @@
-# Motion Principles — the "premium look" rules inferred from the Jitter catalog
+# Motion Principles — the "premium look" rules inferred from the source catalog
 
 Apply these across every scene. They are the difference between default-looking
-animation and Jitter-grade motion.
+animation and premium-grade motion.
 
 ## 1. Two easing families only
 The catalog runs on exactly two feels:
