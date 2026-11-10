@@ -78,6 +78,16 @@ const asDate = (d) => {
 /** Day 0 of the plan: today, or the next working day when today is a Sunday. */
 const dayZero = (state) => addWorkdays((state.today && asDate(state.today)) || today(), 0);
 
+let datesMemo = null; // the same 48 dates serve every run made on one day
+function horizonDates(t0) {
+  if (datesMemo?.key !== t0.getTime()) {
+    const list = [new Date(t0)];
+    while (list.length < HORIZON) list.push(addWorkdays(list[list.length - 1], 1));
+    datesMemo = { key: t0.getTime(), list };
+  }
+  return datesMemo.list.slice();
+}
+
 /** Free stock and lead time for extra pieces of a style. Null when the style is not known. */
 export function materialCheck(state, styleId, qty, assume) {
   const A = assumptions(assume);
@@ -113,7 +123,7 @@ export function simulate(state, sc = null, assume = null) {
   const A = assumptions(assume);
   const t0 = dayZero(state);
   const styles = by(state.styles || [], 'id');
-  const dates = Array.from({ length: HORIZON }, (_, i) => addWorkdays(t0, i));
+  const dates = horizonDates(t0);
   const skipped = [];
 
   // ── Capacity: standard minutes per work centre per day ──
@@ -188,6 +198,7 @@ export function simulate(state, sc = null, assume = null) {
       j.done = start0[i].slice(); j.prev = j.done.slice(); j.finishDay = null; j.firstDay = null; j.stitchDay = pass === 0 ? null : j.stitchDay; j.stageEnd = STAGES.map(() => null);
     });
     for (let d = 0; d < HORIZON; d++) {
+      if (jobs.every((j) => j.finishDay !== null)) break;
       const left = Object.fromEntries(wcs.map((w) => [w.id, w.cap[d]]));
       for (const j of jobs) {
         if (j.finishDay !== null || d < j.startDay) continue;
@@ -310,9 +321,14 @@ export function options(state, sc, assume = null, base = simulate(state, null, a
     const d2cSteps = has('stitch_d2c') ? [0, 2, 4, 6, 8] : [0];
     const finishSteps = has('finish') ? [0, 1, 2, 4] : [0];
     const sampleSteps = has('stitch_sample') && sc.runs.some((r) => r.kind === 'sample') ? [0, 2, 4, 6] : [0];
+    const last = (list) => list[list.length - 1];
+    const trialOf = (overtime, xb, xd, xf, xs) => ({ ...sc, overtime: Math.max(sc.overtime, overtime), extraB2B: sc.extraB2B + xb, extraD2C: sc.extraD2C + xd, extraFinish: sc.extraFinish + xf, extraSample: (sc.extraSample || 0) + xs });
+    // More capacity never makes the plan worse, so if every lever at full does not fit, nothing will.
+    const most = trialOf(3, last(b2bSteps), last(d2cSteps), last(finishSteps), last(sampleSteps));
+    const reachable = compare(base, simulate(state, most, assume), assume).verdict === 'fits';
     let best = null;
-    for (const overtime of [0, 1, 2, 3]) for (const xb of b2bSteps) for (const xd of d2cSteps) for (const xf of finishSteps) for (const xs of sampleSteps) {
-      const trial = { ...sc, overtime: Math.max(sc.overtime, overtime), extraB2B: sc.extraB2B + xb, extraD2C: sc.extraD2C + xd, extraFinish: sc.extraFinish + xf, extraSample: (sc.extraSample || 0) + xs };
+    if (reachable) for (const overtime of [0, 1, 2, 3]) for (const xb of b2bSteps) for (const xd of d2cSteps) for (const xf of finishSteps) for (const xs of sampleSteps) {
+      const trial = trialOf(overtime, xb, xd, xf, xs);
       const cost = leverCost(state, trial, assume).total;
       if (best && cost >= best.cost) continue;
       const cmp = compare(base, simulate(state, trial, assume), assume);

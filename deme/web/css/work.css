@@ -1,0 +1,181 @@
+/* The four purpose-built work screens: Today, My day, Scan station, Dispatch gate.
+   Everything is scoped under .work (the root of each of these views) and uses app.css tokens only.
+   Prefixes: wk- shared pieces, hm- Today, md- My day, sc- Scan station, gt- Dispatch gate. */
+
+/* ───── Shared pieces ───── */
+.work .panel { min-width: 0; }
+.work .wk-date, .work .wk-n { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.work .wk-none { padding: 20px 18px; color: var(--ink-3); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.work .wk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.work .wk-arrow { flex: none; color: var(--ink-3); transition: transform .25s var(--ease-out), color .2s; }
+/* A hairline of the view's gradient along the top of the card that matters most */
+.work .wk-edge { position: relative; overflow: hidden; }
+.work .wk-edge::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--g); }
+.work .wk-bigbtn { min-height: 64px; padding: 8px 20px; font-size: 14px; line-height: 1.3; white-space: normal; text-align: center; }
+.work .wk-scan-input { min-height: 76px; padding: 10px 16px; font: 400 clamp(24px, 6vw, 32px)/1.1 var(--font-mono); letter-spacing: .02em; text-transform: uppercase; }
+.work .wk-scan-input::placeholder { color: var(--ink-3); text-transform: none; font: 300 clamp(18px, 4.6vw, 22px)/1.1 var(--font-display); letter-spacing: -.01em; }
+/* The answer to a scan: large enough to read at arm's length */
+.work .wk-result { border: 1px solid var(--line); border-left: 6px solid var(--ok); border-radius: var(--r-lg); background: var(--ok-soft); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; animation: rise .4s var(--ease-out) both; }
+.work .wk-result[data-tone="crit"] { border-left-color: var(--crit); background: var(--crit-soft); }
+.work .wk-result .eyebrow { color: var(--ink-2); }
+.work #scResult:empty, .work #gtResult:empty { display: none; }
+.work .wk-result-text { font: 300 clamp(21px, 4.8vw, 28px)/1.25 var(--font-display); letter-spacing: -.02em; overflow-wrap: anywhere; }
+
+/* ───── Today ───── */
+.work .hm-body { display: flex; flex-direction: column; gap: 22px; }
+.work .hm-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.work .hm-cols.is-one { grid-template-columns: minmax(0, 760px); }
+.work .hm-panel { overflow: hidden; }
+
+.work .hm-att-list > li + li, .work .hm-steps > li + li { border-top: 1px solid var(--line); }
+.work .hm-att { width: 100%; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto 16px; align-items: center; gap: 4px 14px; padding: 13px 18px; border: 0; background: none; text-align: left; transition: background .2s; }
+.work .hm-att-n { font: 300 28px/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.work .hm-att-body { min-width: 0; }
+.work .hm-att-title { display: block; font-weight: 500; }
+.work .hm-att-sub { display: block; font-size: 12.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work button.hm-att:hover, .work .hm-step:hover { background: var(--surface-2); }
+.work button.hm-att:hover .wk-arrow, .work .hm-step:hover .wk-arrow { transform: translateX(3px); color: var(--ink); }
+.work .hm-att:focus-visible, .work .hm-step:focus-visible { outline-offset: -2px; }
+
+.work .hm-sales { display: flex; flex-direction: column; gap: 20px; }
+.work .hm-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 18px 24px; }
+.work .hm-big { font: 300 34px/1.1 var(--font-display); letter-spacing: -.03em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.work .hm-note { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+.work .hm-block { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; border-top: 1px solid var(--line); min-width: 0; }
+.work .hm-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Sales per day: one series of thin columns on a single baseline */
+.work .hm-plot { position: relative; height: 172px; }
+.work .hm-area { position: absolute; inset: 20px 0 0 0; }
+.work .hm-rule { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--line); }
+.work .hm-rule.is-base { bottom: 0; border-top-color: var(--line-2); }
+.work .hm-rule span { position: absolute; left: 0; bottom: 4px; font: 400 10px/1 var(--font-mono); letter-spacing: .04em; color: var(--ink-3); white-space: nowrap; }
+.work .hm-bars { position: absolute; inset: 0 0 0 60px; display: flex; align-items: stretch; border-radius: var(--r-sm); }
+.work .hm-bars:focus-visible { outline-offset: 4px; }
+.work .hm-col { flex: 1; min-width: 0; display: flex; align-items: flex-end; justify-content: center; border-radius: var(--r-sm) var(--r-sm) 0 0; transition: background .15s; }
+.work .hm-col i { display: block; width: min(56%, 12px); border-radius: 4px 4px 0 0; background: var(--ink); }
+.work .hm-col.is-today i { background: var(--accent); }
+.work .hm-col.is-on { background: var(--surface-2); }
+.work .hm-tip { position: absolute; z-index: 3; pointer-events: none; padding: 7px 10px; border-radius: var(--r-md); background: var(--ink); color: var(--surface); font-size: 12.5px; line-height: 1.35; white-space: nowrap; box-shadow: var(--shadow-1); }
+.work .hm-tip strong { display: block; font: 400 10px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; opacity: .7; margin-bottom: 2px; }
+.work .hm-axis { display: flex; justify-content: space-between; gap: 12px; margin: -4px 0 0 60px; font: 400 10px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.work .hm-nosales { position: absolute; inset: 20px 0 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 0 12px; }
+.work .hm-nosales p { font: 300 20px/1.2 var(--font-display); letter-spacing: -.01em; color: var(--ink-2); }
+.work .hm-details summary { width: fit-content; cursor: pointer; padding: 4px 0; font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.work .hm-details summary:hover, .work .hm-details[open] summary { color: var(--ink); }
+.work .hm-details .table-wrap { margin-top: 8px; border: 1px solid var(--line); border-radius: var(--r-md); max-height: 300px; overflow-y: auto; }
+.work .hm-top li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(72px, auto); gap: 14px; align-items: baseline; padding: 9px 0; }
+.work .hm-top li + li { border-top: 1px solid var(--line); }
+.work .hm-top-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.work .hm-top-n { font: 400 12.5px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; white-space: nowrap; }
+
+/* Getting started */
+.work .hm-start { max-width: 760px; }
+.work .hm-start .panel-head { border-bottom: 0; }
+.work .hm-start .bar { border-radius: 0; height: 3px; }
+.work .hm-steps { border-top: 1px solid var(--line); }
+.work .hm-step { width: 100%; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 16px; align-items: center; gap: 14px; padding: 15px 18px; border: 0; background: none; text-align: left; transition: background .2s; }
+.work .hm-tick { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line-2); display: grid; place-items: center; color: transparent; }
+.work .hm-step.is-done .hm-tick { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.work .hm-step-title { font-size: 15px; font-weight: 500; }
+.work .hm-step.is-done .hm-step-title { color: var(--ink-2); font-weight: 400; }
+.work .hm-step-note { font: 400 11px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+
+/* ───── My day ───── */
+.work .md-unlinked { max-width: 760px; padding: 14px 18px; border-radius: var(--r-lg); background: var(--warn-soft); font-size: 15px; }
+.work .md-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.work .md-col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.work .md-cols.is-unlinked { grid-template-columns: minmax(0, 760px); }
+.work .md-cols.is-unlinked .md-col:first-child { display: none; }
+.work #mdKras .table { min-width: 460px; }
+.work .md-check { padding: 26px 22px 24px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.work .md-state { font: 300 clamp(28px, 3.4vw, 40px)/1.05 var(--font-display); letter-spacing: -.03em; }
+.work .md-times { display: flex; flex-wrap: wrap; gap: 8px 36px; }
+.work .md-time { font: 400 26px/1.1 var(--font-mono); font-variant-numeric: tabular-nums; margin-top: 6px; }
+.work .md-check .wk-bigbtn { width: 100%; max-width: 380px; }
+.work .md-month-h { margin-bottom: 10px; }
+.work #mdMonth .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.work #mdMonth .kpi { padding: 14px 16px; }
+.work .md-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: end; }
+.work .md-wide { grid-column: 1 / -1; }
+.work .md-list > li { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; padding: 12px 18px; border-top: 1px solid var(--line); }
+.work .panel-head + .md-list > li:first-child { border-top: 0; }
+.work .md-row-main { min-width: 0; flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; }
+.work .md-row-main strong { font-weight: 500; overflow-wrap: anywhere; }
+.work .md-row-sub { font-size: 12.5px; color: var(--ink-3); overflow-wrap: anywhere; }
+.work .md-row-end { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.work .md-line { border-top: 1px solid var(--line); }
+
+/* ───── Scan station: large type, large targets, one hand ───── */
+.work .sc-wrap { display: flex; flex-direction: column; gap: 18px; max-width: 720px; }
+.work .sc-station { padding: 24px 22px 22px; display: flex; flex-direction: column; gap: 18px; }
+.work .sc-station .field > label, .work .gt-scan .field > label { font-size: 12px; }
+.work .sc-station-input { min-height: 52px; font-size: 18px; }
+.work .sc-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.work .sc-actions .wk-bigbtn { min-height: 72px; }
+.work .sc-list > li { display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
+.work .sc-list > li + li { border-top: 1px solid var(--line); }
+.work .sc-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.work .sc-row-main strong { font: 400 20px/1.2 var(--font-mono); overflow-wrap: anywhere; }
+.work .sc-row-sub { font-size: 13px; color: var(--ink-3); }
+.work .sc-fin { min-height: 52px; padding: 0 22px; font-size: 13px; }
+.work .sc-list .icon-btn { width: 40px; height: 40px; font-size: 18px; line-height: 1; }
+.work .sc-floor .table td { white-space: nowrap; }
+.work .sc-floor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; margin-top: 6px; }
+
+/* ───── Dispatch gate ───── */
+.work .gt-cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 22px; align-items: start; }
+.work .gt-cols.is-one { grid-template-columns: minmax(0, 720px); }
+.work .gt-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.work .gt-scan { padding: 24px 22px 22px; display: flex; flex-direction: column; gap: 16px; }
+.work .gt-plan { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; line-height: 1.4; }
+.work .gt-plan .tag { margin-top: 1px; }
+.work .gt-extra { min-height: 52px; font-size: 18px; }
+.work .gt-result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.work .gt-dir { display: inline-flex; align-items: center; gap: 8px; font: 400 12px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; }
+.work .gt-result-parcel { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; }
+.work .gt-result-parcel .btn { margin-left: auto; }
+.work .gt-trail { border-top: 1px solid var(--line); }
+.work .gt-trail li { display: grid; grid-template-columns: 96px auto minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 8px 0; font-size: 13.5px; }
+.work .gt-trail li + li { border-top: 1px solid var(--line); }
+.work .gt-trail-at { font: 400 12px/1.4 var(--font-mono); color: var(--ink-2); white-space: nowrap; }
+.work .gt-trail .tag { justify-self: start; }
+.work .gt-panel { overflow: hidden; }
+.work .gt-list > li + li { border-top: 1px solid var(--line); }
+.work .gt-row { display: flex; align-items: center; gap: 10px; padding-right: 12px; }
+.work .gt-pick { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 12px 6px 12px 18px; border: 0; background: none; text-align: left; transition: background .2s; }
+.work .gt-pick:hover { background: var(--surface-2); }
+.work .gt-pick:focus-visible { outline-offset: -2px; }
+.work .gt-pick strong { font: 400 15px/1.3 var(--font-mono); overflow-wrap: anywhere; }
+.work .gt-sub { font-size: 12.5px; color: var(--ink-3); overflow-wrap: anywhere; }
+
+/* ───── Narrow screens ───── */
+@media (max-width: 1080px) {
+  .work .hm-cols, .work .md-cols, .work .sc-floor, .work .gt-cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .work .hm-att { grid-template-columns: 38px minmax(0, 1fr) 16px; padding: 12px 14px; }
+  .work .hm-att-n { grid-column: 1; grid-row: 1; font-size: 24px; }
+  .work .hm-att-body { grid-column: 2; grid-row: 1; }
+  .work .hm-att .tag { grid-column: 2; grid-row: 2; justify-self: start; }
+  .work .hm-att .wk-arrow { grid-column: 3; grid-row: 1 / span 2; }
+  .work .hm-att-sub { white-space: normal; }
+  .work .hm-step { grid-template-columns: 22px minmax(0, 1fr) 16px; gap: 2px 12px; padding: 13px 14px; }
+  .work .hm-step .hm-tick { grid-row: 1 / span 2; }
+  .work .hm-step-title { grid-column: 2; grid-row: 1; }
+  .work .hm-step-note { grid-column: 2; grid-row: 2; }
+  .work .hm-step .wk-arrow { grid-column: 3; grid-row: 1 / span 2; }
+  .work .hm-bars { left: 52px; }
+  .work .hm-axis { margin-left: 52px; }
+  .work .hm-big { font-size: 28px; }
+  .work .md-form { grid-template-columns: minmax(0, 1fr); }
+  .work .md-check { padding: 22px 16px 18px; }
+  .work #mdMonth .kpi { padding: 12px; }
+  .work #mdMonth .kpi-value { font-size: 28px; }
+  .work .sc-station, .work .gt-scan { padding: 20px 16px 16px; }
+  .work .sc-list > li { padding: 12px 14px; gap: 8px; }
+  .work .sc-fin { padding: 0 16px; }
+  .work .gt-trail li { grid-template-columns: auto minmax(0, 1fr); }
+  .work .gt-trail li > :last-child { grid-column: 1 / -1; }
+  .work .gt-pick { padding-left: 14px; }
+}

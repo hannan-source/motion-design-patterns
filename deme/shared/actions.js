@@ -591,7 +591,7 @@ export const ACTIONS = {
       }
       const perPiece = minutes !== null && pieces > 0 ? round(minutes / pieces, 2) : null;
       return {
-        message: perPiece === null ? `Finished bundle ${bundle.no}: ${count(pieces, 'piece')}.` : `Finished bundle ${bundle.no}: ${count(pieces, 'piece')} in ${count(minutes, 'minute')}, ${qty(perPiece)} minutes per piece.`,
+        message: perPiece === null ? `Finished bundle ${bundle.no}: ${count(pieces, 'piece')}.` : `Finished bundle ${bundle.no}: ${count(pieces, 'piece')} in ${count(minutes, 'minute')}, ${qty(perPiece)} ${perPiece === 1 ? 'minute' : 'minutes'} per piece.`,
         data: { bundle, minutes, perPiece },
       };
     },
