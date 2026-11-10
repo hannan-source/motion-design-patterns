@@ -707,3 +707,7 @@ export const ACTIONS = {
     },
   },
 };
+
+// The go-live plan and the task board steps live in their own file.
+import { GOLIVE_ACTIONS } from './golive.js';
+Object.assign(ACTIONS, GOLIVE_ACTIONS);

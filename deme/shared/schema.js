@@ -3,6 +3,8 @@
 // so adding a field or an entity here is enough for it to appear everywhere.
 // Runs unchanged in Node and in the browser.
 
+import { FUNCTIONS, TRACKS } from './golive.js';
+
 export const COMPANY = 'Deme';
 export const STAGES = ['cut', 'stitch', 'finish', 'qc', 'pack'];
 export const STAGE_NAMES = { cut: 'Cutting', stitch: 'Stitching', finish: 'Finishing', qc: 'Final QC', pack: 'Packing' };
@@ -271,13 +273,17 @@ export const ENTITIES = [
 
   // ── Projects ──
   { id: 'projects', module: 'projects', name: 'Projects', one: 'Project', title: 'name',
-    statuses: S(['active', 'Active', 'info'], ['done', 'Done', 'ok'], ['paused', 'Paused', 'warn']), initial: 'active',
-    fields: [['name', 'Name', 'text', { req: true, list: true }], ['owner', 'Owner', 'user', { list: true }], ['start', 'Start', 'date', { def: 'today' }], ['due', 'Due', 'date', { list: true }], ['about', 'About', 'long', {}]],
+    info: 'A project groups tasks toward one outcome. The go-live plan is a project created from a ready-made set of tasks.',
+    statuses: S(['active', 'Active', 'info'], ['done', 'Done', 'ok'], ['paused', 'Paused', 'warn']), initial: 'active', editWhen: ['active', 'paused', 'done'],
+    fields: [['name', 'Name', 'text', { req: true, list: true }], ['owner', 'Owner', 'user', { list: true }], ['start', 'Start', 'date', { def: 'today' }], ['due', 'Due', 'date', { list: true }], ['about', 'About', 'long', {}], ['kind', 'Kind', 'text', { ro: true }]],
     actions: [{ id: 'project.done', label: 'Mark done', when: ['active', 'paused'] }, { id: 'project.pause', label: 'Pause', when: ['active'] }, { id: 'project.resume', label: 'Resume', when: ['paused'] }] },
   { id: 'tasks', module: 'projects', name: 'Tasks', one: 'Task', title: 'title',
-    statuses: S(['todo', 'To do'], ['doing', 'Doing', 'info'], ['done', 'Done', 'ok']), initial: 'todo',
-    fields: [['project', 'Project', 'ref', { ref: 'projects', req: true, list: true }], ['title', 'Task', 'text', { req: true, list: true }], ['assignee', 'Owner', 'user', { list: true }], ['due', 'Due', 'date', { list: true }], ['notes', 'Notes', 'long', {}]],
-    actions: [{ id: 'task.start', label: 'Start', when: ['todo'] }, { id: 'task.done', label: 'Done', when: ['todo', 'doing'] }, { id: 'task.reopen', label: 'Reopen', when: ['done'] }] },
+    info: 'A task has one owner, a start and a due date, and a clear test for done. The owner can be a function, such as Stores, before a person is named. Masters do not use the system: where their input is needed it is written on the task.',
+    statuses: S(['todo', 'To do'], ['doing', 'Doing', 'info'], ['blocked', 'Blocked', 'crit'], ['done', 'Done', 'ok']), initial: 'todo', editWhen: ['todo', 'doing', 'blocked', 'done'],
+    fields: [['project', 'Project', 'ref', { ref: 'projects', req: true, list: true }], ['title', 'Task', 'text', { req: true, list: true }], ['track', 'Track', 'select', { list: true, options: TRACKS }],
+      ['ownerRole', 'Owner', 'select', { list: true, options: FUNCTIONS }], ['assignee', 'Person', 'user', { list: true }], ['start', 'Start', 'date', {}], ['due', 'Due', 'date', { list: true }],
+      ['needs', 'Needs input from', 'text', {}], ['doneWhen', 'Done when', 'long', {}], ['notes', 'Notes', 'long', {}], ['blockedBy', 'Blocked by', 'text', { ro: true }], ['doneOn', 'Done on', 'date', { ro: true }], ['opens', 'Screen', 'text', { ro: true }]],
+    actions: [{ id: 'task.start', label: 'Start', when: ['todo', 'blocked'] }, { id: 'task.done', label: 'Done', when: ['todo', 'doing', 'blocked'] }, { id: 'task.block', label: 'Blocked', when: ['todo', 'doing'], form: [['reason', 'What is in the way', 'text', { req: true }]] }, { id: 'task.reopen', label: 'Reopen', when: ['done'] }] },
 
   // ── Marketing ──
   { id: 'campaigns', module: 'marketing', name: 'Campaigns', one: 'Campaign', title: 'name',

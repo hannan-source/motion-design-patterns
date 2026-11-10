@@ -79,6 +79,8 @@ export const api = {
     const vs = data.all('vouchers').filter((v) => (ids.length ? ids.includes(v.id) : v.status === 'open'));
     return vouchersToTallyXML(vs.map((v) => ({ ...v, id: v.no })), 'Deme');
   },
+  /** Service keys for other programs (server only). */
+  keys: { list: () => http('GET', 'keys'), create: (name, role) => http('POST', 'keys', { name, role }), setActive: (id, active) => http('PUT', `keys/${id}`, { active }) },
   /** Preview only: wipe everything stored in this browser. */
   resetPreview() { try { localStorage.removeItem(LS_DB); localStorage.removeItem(LS_USER); } catch { /* fine */ } location.reload(); },
 };

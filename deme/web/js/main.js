@@ -2,19 +2,19 @@
 // Each view module exports mount(el, ctx) and returns a cleanup function.
 
 import { api, data } from './api.js';
-import { $, esc, info, wireInfo, oops, busy } from './ui.js';
+import { $, esc, info, wireInfo, oops, busy, toast } from './ui.js';
 import { mountField, cssVarFor } from './fx.js';
 import { MODULES, ROLES, ENTITIES, entityById } from '../shared/schema.js';
 
 // Each area of the app wears one of the shared gradients.
 export const VARIANT = {
-  home: 'services', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
+  home: 'services', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
   masters: 'about', purchasing: 'engagement', inventory: 'industries', quality: 'hll-trust', production: 'services', b2b: 'contact', b2c: 'hll-application',
   logistics: 'hll-ai', finance: 'hll-foundation', hr: 'hll-people', projects: 'hll-ontology', marketing: 'engagement', design: 'about', admin: 'contact',
 };
 const VIEWS = {
   home: () => import('./home.js'), map: () => import('./map.js'), room: () => import('./room.js'),
-  myday: () => import('./myday.js'), scan: () => import('./scan.js'), gate: () => import('./gate.js'), erp: () => import('./erp.js'),
+  myday: () => import('./myday.js'), pulse: () => import('./pulse.js'), tracker: () => import('./tracker.js'), scan: () => import('./scan.js'), gate: () => import('./gate.js'), erp: () => import('./erp.js'),
 };
 const slug = (id) => id.replace(/_/g, '-');
 const unslug = (s) => s.replace(/-/g, '_');
@@ -27,7 +27,9 @@ function menu() {
   const c = data.can;
   const works = ['production', 'inventory', 'quality', 'b2b', 'b2c', 'logistics', 'finance', 'purchasing'].some((m) => c(m, 'read'));
   const top = [], floor = [], mods = [];
-  if (works) top.push(['home', 'Today'], ['map', 'Business map']);
+  if (works) top.push(['home', 'Today']);
+  if (c('admin', 'admin')) top.push(['pulse', 'Founder view']);
+  if (works) top.push(['map', 'Business map']);
   if (c('production', 'read') || c('b2b', 'read') || c('design', 'read')) top.push(['room', 'Production room']);
   if (c('production', 'scan')) floor.push(['scan', 'Scan station']);
   if (c('logistics', 'write') || c('b2c', 'write') || c('production', 'write')) floor.push(['gate', 'Dispatch gate']);
@@ -39,9 +41,10 @@ const firstRoute = () => { const m = menu(); return (m.top[0] || m.floor[0])[0];
 
 function parse() {
   const h = location.hash.slice(1);
+  if (h === 'm-projects') return { view: 'tracker', module: 'projects', key: 'projects', name: h };
   if (h.startsWith('m-') && MODULES[h.slice(2)]) return { view: 'erp', module: h.slice(2), key: h.slice(2), name: h };
   if (h.startsWith('e-') && entityById[unslug(h.slice(2))]) { const e = entityById[unslug(h.slice(2))]; return { view: 'erp', module: e.module, entity: e.id, key: e.module, name: h }; }
-  if (VIEWS[h] && h !== 'erp') return { view: h, key: h, name: h };
+  if (VIEWS[h] && h !== 'erp' && h !== 'tracker') return { view: h, key: h, name: h };
   return null;
 }
 
@@ -52,25 +55,60 @@ const ctx = {
   openEntity(entity, opts = {}) { ctx.go(`e-${slug(entity)}`, opts); },
 };
 
+/**
+ * Where a scanned or typed code leads. Deme's own tags (rolls, bundles, store pieces, materials),
+ * courier tracking barcodes on parcels, and any document number all resolve here.
+ */
+function findCode(raw) {
+  const code = String(raw || '').trim(); if (!code) return null;
+  const lc = code.toLowerCase();
+  const hit = (entity, key) => (data.canRead(entity) ? data.all(entity).find((d) => String(d[key] ?? '').toLowerCase() === lc) : null);
+  const canGate = data.can('logistics', 'write') || data.can('b2c', 'write') || data.can('production', 'write');
+  if (canGate && (hit('parcels', 'barcode') || hit('store_orders', 'tag'))) return { name: 'gate', opts: { code } };
+  if (data.can('production', 'scan') && (hit('bundles', 'no') || (!data.canRead('bundles') && /^b-\d+$/i.test(code)))) return { name: 'scan', opts: { code } };
+  for (const [entity, key] of [['rolls', 'no'], ['items', 'code'], ['styles', 'code'], ['machines', 'code'], ['shop_orders', 'orderNo'], ['store_orders', 'tag'], ['parcels', 'barcode']]) { const d = hit(entity, key); if (d) return { entity, id: d.id }; }
+  for (const e of ENTITIES) if (e.no) { const d = hit(e.id, 'no'); if (d) return { entity: e.id, id: d.id }; }
+  if (canGate && !data.canRead('parcels')) return { name: 'gate', opts: { code } };
+  return null;
+}
+function followCode(code) {
+  const to = findCode(code);
+  if (!to) { toast(`Nothing in Deme has the code ${String(code).trim()}.`, 'crit'); return false; }
+  if (to.name) ctx.go(to.name, to.opts); else ctx.openEntity(to.entity, { id: to.id });
+  return true;
+}
+// A handheld scanner types fast and ends with Enter. When no field has focus, catch that burst.
+let burst = '', burstAt = 0;
+document.addEventListener('keydown', (e) => {
+  if (!data.ready || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const now = performance.now();
+  if (e.key === 'Enter') { if (burst.length >= 4 && now - burstAt < 120) { e.preventDefault(); followCode(burst); } burst = ''; return; }
+  if (e.key.length !== 1) return;
+  burst = now - burstAt < 60 ? burst + e.key : e.key; burstAt = now;
+});
+
 async function route() {
   if (!data.ready) return;
   let r = parse();
   const m = menu();
   const allowed = new Set([...m.top, ...m.floor, ...m.mods].map((x) => x[0]));
-  if (!r || !(allowed.has(r.name) || (r.view === 'erp' && allowed.has(`m-${r.module}`)))) { location.replace(`#${firstRoute()}`); return; }
+  if (!r || !(allowed.has(r.name) || (r.module && allowed.has(`m-${r.module}`)))) { location.replace(`#${firstRoute()}`); return; }
   const opts = pending; pending = {};
   if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
   document.querySelector('.drawer-wrap')?.remove();
-  document.querySelectorAll('.rail a').forEach((a) => { const on = a.dataset.route === r.name || (r.view === 'erp' && a.dataset.route === `m-${r.module}`); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  document.querySelectorAll('.rail a').forEach((a) => { const on = a.dataset.route === r.name || (r.module && a.dataset.route === `m-${r.module}`); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   document.querySelector('.shell')?.classList.remove('nav-open'); document.querySelector('.scrim')?.remove();
   document.documentElement.style.setProperty('--g', cssVarFor(VARIANT[r.key] || 'services'));
   const view = $('#view'); view.innerHTML = ''; view.dataset.view = r.view;
   try {
     const mod = await VIEWS[r.view]();
     cleanup = mod.mount(view, { ...ctx, opts, route: r }) || null;
+    if (opts.code) { const box = view.querySelector('#gtBarcode, #scBundle'); if (box) { box.value = opts.code; box.dispatchEvent(new Event('input', { bubbles: true })); box.focus(); } }
   } catch (e) {
     console.error(e);
-    view.innerHTML = `<div class="workspace"><div class="empty"><h3>This screen could not open</h3><p>${esc(e.message || e)}</p></div></div>`;
+    view.innerHTML = `<div class="workspace"><div class="empty"><h3>This screen could not open</h3><p>${esc(/dynamically imported module/.test(String(e.message)) ? 'It is not part of this build yet.' : e.message || e)}</p></div></div>`;
   }
 }
 
@@ -81,6 +119,7 @@ function shell() {
     <div class="shell">
       <nav class="rail" aria-label="Main">
         <div class="rail-top"><a class="brand" href="#${firstRoute()}">Deme</a></div>
+        <form class="finder" id="finder" role="search"><label class="eyebrow" for="finderBox">Scan or find ${info('Scan any tag or type any number: a roll, bundle, parcel tracking barcode, store piece, material code, order or document number. You are taken to the record, or to the scan screen that handles it. With no field selected, a handheld scanner works from anywhere in the app.', 'Scan or find')}</label><input class="input" id="finderBox" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="Tag or number"></form>
         <div class="rail-scroll">
           ${api.mode === 'local' ? `<div class="mode-flag">Preview without a server. Data stays in this browser. ${info('This page is running without the Deme server, so everything you add is saved only in this browser on this device. Run the server (see the README) for shared, permanent data and real sign-in.', 'Preview mode')}</div>` : ''}
           ${m.top.length ? `<div class="rail-group">${m.top.map(link).join('')}</div>` : ''}
@@ -95,6 +134,7 @@ function shell() {
         <div class="glow" aria-hidden="true"></div>
       </div>
     </div>`;
+  $('#finder').addEventListener('submit', (e) => { e.preventDefault(); const box = $('#finderBox'); if (followCode(box.value)) box.value = ''; });
   $('#signOut').addEventListener('click', async () => { await api.logout().catch(() => {}); data.clear(); start(); });
   $('#navBtn').addEventListener('click', () => {
     const s = $('.shell'); s.classList.add('nav-open');

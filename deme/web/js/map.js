@@ -557,7 +557,7 @@ export function mount(el, ctx) {
     // Keep the model centred in the space the inspector leaves free.
     const insp = inspector.getBoundingClientRect();
     if (W > 860) camera.setViewOffset(W, H, (insp.width + 16) / 2, 0, W, H);
-    else camera.setViewOffset(W, H, 0, (sheetOpen ? insp.height : 132) / 2 - 20, W, H);
+    else camera.setViewOffset(W, H, 0, (sheetOpen ? insp.height : 132) / 2 - 20 - (tour ? tourEl.offsetHeight / 2 : 0), W, H); // also clear of the tour caption at the top
     camera.fov = W > 860 ? 30 : 38;
     camera.updateProjectionMatrix();
     fitHome();
@@ -629,7 +629,8 @@ export function mount(el, ctx) {
     cam.tx = clamp(cam.tx, -80, 80); cam.tz = clamp(cam.tz, -60, 50);
   };
   canvas.addEventListener('pointerdown', (e) => {
-    canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* a pointer that cannot be captured still selects */ }
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     fly = null; moved = 0; hoverAt = null;
     if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey };
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }; drag = null; }
@@ -821,10 +822,11 @@ export function mount(el, ctx) {
       <div class="tour-nav"><button class="btn btn-sm" type="button" data-t="prev" ${tour.i === 0 ? 'disabled' : ''}>Back</button>
       ${tour.i < tour.def.steps.length - 1 ? '<button class="btn btn-sm btn-primary" type="button" data-t="next">Next</button>' : '<button class="btn btn-sm btn-primary" type="button" data-t="end">Finish</button>'}
       <button class="btn btn-sm btn-quiet" type="button" data-t="end">Close</button></div>`;
+    resize();
   }
   function endTour(home = true) {
     if (!tour) return;
-    layers = tour.saved; tour = null; tourEl.hidden = true; wrap.classList.remove('is-touring');
+    layers = tour.saved; tour = null; tourEl.hidden = true; wrap.classList.remove('is-touring'); resize();
     if (home) { select(null); flyTo(HOME); } else refreshFlows();
   }
   tourEl.addEventListener('click', (e) => {
@@ -955,7 +957,7 @@ export function mount(el, ctx) {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
       for (const m of [].concat(o.material || [])) if (!m.userData.shared) mats.add(m);
     });
-    for (const m of [...Object.values(M), ...Object.values(ringMat), ...mats]) m.dispose();
+    for (const m of [...Object.values(M), ...Object.values(ringMat), ...Object.values(layerMat), selMat, unseen, ...mats]) m.dispose();
     renderer.dispose(); renderer.forceContextLoss();
     if (window.__demeMap?.cam === cam) delete window.__demeMap;
   };

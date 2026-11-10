@@ -5,6 +5,26 @@ import { api, data } from './api.js';
 import { $, $$, esc, info, toast, oops, busy, show, statusTag, formHtml, readForm, drawer, parseCsv, fields, fmtStamp, inr, num } from './ui.js';
 import { MODULES, ROLES, LEVELS, ENTITIES, entityById, fieldsOf, levelOf } from '../shared/schema.js';
 import { titleOf } from '../shared/service.js';
+import { barcodeSvg } from '../shared/code128.js';
+
+// Record types that carry a tag Deme prints itself: what the barcode holds and the lines under it.
+const LABELS = {
+  rolls: (d) => ({ code: d.no, lines: [data.title('items', d.item), `${num(d.metres)} m${d.shade ? ` · ${d.shade}` : ''}`] }),
+  bundles: (d) => ({ code: d.no, lines: [data.title('work_orders', d.workOrder), `${num(d.pieces)} pieces`] }),
+  store_orders: (d) => ({ code: d.tag, lines: [d.no, data.title('styles', d.style)] }),
+  items: (d) => ({ code: d.code, lines: [d.name, d.location || ''] }),
+};
+// A picture of the record's state, shown as an extra column in lists and on board cards.
+const meter = (value, max, label, state = '') => `<span class="meter" data-state="${state}"><span class="bar"><i style="--v:${Math.max(0, Math.min(100, max > 0 ? (value / max) * 100 : 0)).toFixed(0)}%"></i></span><span class="num">${esc(label)}</span></span>`;
+const VISUAL = {
+  work_orders: ['Progress', (d) => `<span class="stages" title="Cut, stitched, finished, passed QC, packed">${['cut', 'stitch', 'finish', 'qc', 'pack'].map((k) => `<i style="--v:${Math.min(100, d.qty ? ((d[k] || 0) / d.qty) * 100 : 0).toFixed(0)}%"></i>`).join('')}</span>`],
+  items: ['Level', (d) => (d.minLevel ? meter(d.onHand || 0, Math.max(d.minLevel * 2, d.onHand || 0), `${num(d.onHand || 0)} / min ${num(d.minLevel)}`, (d.onHand || 0) < d.minLevel ? 'crit' : 'ok') : `<span class="num">${num(d.onHand || 0)}</span>`)],
+  bills: ['Paid', (d) => meter(d.paid || 0, d.amount || 0, `${Math.round(d.amount ? ((d.paid || 0) / d.amount) * 100 : 0)}%`)],
+  invoices: ['Received', (d) => meter(d.received || 0, d.total || 0, `${Math.round(d.total ? ((d.received || 0) / d.total) * 100 : 0)}%`)],
+  campaigns: ['Spend', (d) => (d.budget ? meter(d.spend || 0, d.budget, `${Math.round(((d.spend || 0) / d.budget) * 100)}% of budget`, (d.spend || 0) > d.budget ? 'crit' : '') : '')],
+  purchase_orders: ['Lines', (d) => `<span class="num">${(d.lines || []).length}</span>`],
+};
+const viewMode = {}; // record type -> 'list' | 'board'
 
 // Actions that are not tied to a status but belong on a record's drawer.
 const EXTRA = {
@@ -51,11 +71,15 @@ export function mount(el, ctx) {
   function renderList() {
     const e = entityById[current], fs = fieldsOf(e), cols = fs.filter((f) => f.list);
     const all = data.all(current), list = rows(), canAdd = data.canWrite(current);
+    const mode = e.statuses ? (viewMode[current] || 'list') : 'list', vis = VISUAL[current];
+    const flow = e.statuses && all.length ? `<div class="flow" role="group" aria-label="Filter by status">${Object.entries(e.statuses).map(([k, st]) => { const n = all.filter((d) => d.status === k).length; return `<button type="button" class="flow-seg tone-${st.tone}" data-status="${k}" aria-pressed="${statusFilter === k}" style="flex-grow:${Math.max(n, 0.35)}" ${n ? '' : 'data-empty'}><span class="flow-n">${n}</span><span class="flow-name">${esc(st.name)}</span></button>`; }).join('')}</div>` : '';
+    const card = (d) => `<button type="button" class="card" data-open="${d.id}"><strong>${esc(titleOf(e, d))}</strong>${cols.filter((f) => f.k !== e.title && d[f.k] !== undefined && d[f.k] !== '').slice(0, 3).map((f) => `<span class="card-line"><span class="faint">${esc(f.label)}</span> ${show(f, d[f.k])}</span>`).join('')}${vis ? vis[1](d) : ''}</button>`;
     const head = `<div class="toolbar">
         <div class="title-row"><h2>${esc(e.name)}</h2>${info(e.info, e.name)}</div>
         <div class="spacer"></div>
         ${all.length ? `<input class="input search" id="erpSearch" type="search" placeholder="Search" value="${esc(q)}" aria-label="Search ${esc(e.name)}">` : ''}
-        ${e.statuses && all.length ? `<select class="select status" id="erpStatus" aria-label="Status"><option value="">All</option>${Object.entries(e.statuses).map(([k, s]) => `<option value="${k}" ${k === statusFilter ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>` : ''}
+        ${e.statuses && all.length ? `<div class="seg" role="group" aria-label="View"><button type="button" data-viewmode="list" aria-pressed="${mode === 'list'}">List</button><button type="button" data-viewmode="board" aria-pressed="${mode === 'board'}">Board</button></div>` : ''}
+        ${LABELS[current] && all.length ? '<button class="btn btn-outline" type="button" data-act="tags">Print tags</button>' : ''}
         ${current === 'vouchers' && all.length ? '<button class="btn btn-outline" type="button" data-act="tally">Tally export</button>' : ''}
         ${canAdd ? `<button class="btn btn-outline" type="button" data-act="import">Import</button><button class="btn btn-primary" type="button" data-act="add">Add ${esc(e.one.toLowerCase())}</button>` : ''}
       </div>`;
@@ -63,16 +87,23 @@ export function mount(el, ctx) {
       body.innerHTML = `${head}<div class="panel empty"><h3>No ${esc(e.name.toLowerCase())} yet</h3>${canAdd ? `<div class="row"><button class="btn btn-primary" type="button" data-act="add">Add ${esc(e.one.toLowerCase())}</button><button class="btn btn-outline" type="button" data-act="import">Import from a spreadsheet</button></div>` : e.readonly ? '<p>These are written by the system as work happens.</p>' : '<p>Your role can view these but not add them.</p>'}</div>`;
       return;
     }
-    body.innerHTML = `${head}<div class="panel"><div class="table-wrap"><table class="table"><thead><tr>${e.no ? '<th>No.</th>' : ''}${cols.map((f) => `<th class="${f.type === 'number' || f.type === 'money' ? 'num' : ''}">${esc(f.label)}</th>`).join('')}${e.statuses ? '<th>Status</th>' : ''}</tr></thead>
-      <tbody>${list.map((d) => `<tr data-open="${d.id}" tabindex="0">${e.no ? `<td class="mono">${esc(d.no || '')}</td>` : ''}${cols.map((f) => `<td class="${f.type === 'number' || f.type === 'money' ? 'num' : ''}">${show(f, d[f.k])}</td>`).join('')}${e.statuses ? `<td>${statusTag(current, d.status)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+    if (mode === 'board') {
+      body.innerHTML = `${head}${flow}<div class="board">${Object.entries(e.statuses).filter(([k]) => !statusFilter || k === statusFilter).map(([k, st]) => { const mine = list.filter((d) => d.status === k); return `<section class="board-col"><header><span class="tag tag-${st.tone}">${esc(st.name)}</span><span class="n">${mine.length}</span></header>${mine.slice(0, 60).map(card).join('') || '<p class="faint board-none">None</p>'}${mine.length > 60 ? `<p class="faint board-none">and ${mine.length - 60} more in the list view</p>` : ''}</section>`; }).join('')}</div>`;
+      return;
+    }
+    body.innerHTML = `${head}${flow}<div class="panel"><div class="table-wrap"><table class="table"><thead><tr>${e.no ? '<th>No.</th>' : ''}${cols.map((f) => `<th class="${f.type === 'number' || f.type === 'money' ? 'num' : ''}">${esc(f.label)}</th>`).join('')}${vis ? `<th>${esc(vis[0])}</th>` : ''}${e.statuses ? '<th>Status</th>' : ''}</tr></thead>
+      <tbody>${list.map((d) => `<tr data-open="${d.id}" tabindex="0">${e.no ? `<td class="mono">${esc(d.no || '')}</td>` : ''}${cols.map((f) => `<td class="${f.type === 'number' || f.type === 'money' ? 'num' : ''}">${show(f, d[f.k])}</td>`).join('')}${vis ? `<td>${vis[1](d)}</td>` : ''}${e.statuses ? `<td>${statusTag(current, d.status)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
       ${list.length ? '' : '<div class="empty"><p>Nothing matches.</p></div>'}</div>
       <p class="faint count-line">${list.length} of ${all.length}</p>`;
   }
   body.addEventListener('input', (e) => { if (e.target.id === 'erpSearch') { q = e.target.value; const pos = e.target.selectionStart; renderList(); const s = $('#erpSearch', body); s.focus(); s.setSelectionRange(pos, pos); } });
-  body.addEventListener('change', (e) => { if (e.target.id === 'erpStatus') { statusFilter = e.target.value; renderList(); } });
+
   body.addEventListener('click', (e) => {
     const act = e.target.closest('[data-act]')?.dataset.act, row = e.target.closest('[data-open]');
-    if (act === 'add') openForm(null); else if (act === 'import') openImport(); else if (act === 'tally') openTally(); else if (row && module !== 'admin') openRecord(row.dataset.open);
+    const seg = e.target.closest('[data-status]'), vw = e.target.closest("[data-viewmode]");
+    if (seg && module !== 'admin') { statusFilter = statusFilter === seg.dataset.status ? '' : seg.dataset.status; return renderList(); }
+    if (vw && module !== 'admin') { viewMode[current] = vw.dataset.viewmode; return renderList(); }
+    if (act === 'add') openForm(null); else if (act === 'import') openImport(); else if (act === 'tally') openTally(); else if (act === 'tags') openTags(); else if (row && module !== 'admin') openRecord(row.dataset.open);
   });
   body.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('[data-open]') && module !== 'admin') openRecord(e.target.dataset.open); });
 
@@ -84,13 +115,15 @@ export function mount(el, ctx) {
   }
   function recordHtml(e, doc) {
     const fs = fieldsOf(e), acts = allowedActions(e, doc);
-    const editable = data.canWrite(e.id) && (!e.statuses || doc.status === (e.initial || Object.keys(e.statuses)[0]) || data.can(e.module, 'admin'));
+    const editable = data.canWrite(e.id) && (!e.statuses || (e.editWhen || [e.initial || Object.keys(e.statuses)[0]]).includes(doc.status) || data.can(e.module, 'admin'));
     const plain = fs.filter((f) => f.type !== 'lines' && !(f.type === 'long'));
     const lines = fs.filter((f) => f.type === 'lines' && (doc[f.k] || []).length);
     const longs = fs.filter((f) => f.type === 'long' && doc[f.k]);
     return `<header class="drawer-head"><div><p class="eyebrow">${esc(e.one)}</p><h2>${esc(titleOf(e, doc))}</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button></header>
       <div class="drawer-body">
-        <div class="row">${statusTag(e.id, doc.status)}${acts.map((a) => `<button class="btn btn-sm ${a === acts[0] ? 'btn-primary' : 'btn-outline'}" type="button" data-action="${a.id}">${esc(a.label)}</button>`).join('')}</div>
+        ${e.statuses ? `<ol class="steps" aria-label="Status">${Object.entries(e.statuses).map(([k, st]) => `<li class="${k === doc.status ? `is-now tone-${st.tone}` : Object.keys(e.statuses).indexOf(k) < Object.keys(e.statuses).indexOf(doc.status) ? 'is-past' : ''}">${esc(st.name)}</li>`).join('')}</ol>` : ''}
+        ${LABELS[e.id] && LABELS[e.id](doc).code ? `<div class="tagview">${barcodeSvg(LABELS[e.id](doc).code, { height: 38, module: 1.4 })}<span class="mono">${esc(LABELS[e.id](doc).code)}</span></div>` : ''}
+        <div class="row">${acts.map((a) => `<button class="btn btn-sm ${a === acts[0] ? 'btn-primary' : 'btn-outline'}" type="button" data-action="${a.id}">${esc(a.label)}</button>`).join('')}</div>
         <div class="action-form" hidden></div>
         <dl class="facts">${plain.map((f) => `<div><dt>${esc(f.label)}</dt><dd>${show(f, doc[f.k])}</dd></div>`).join('')}</dl>
         ${longs.map((f) => `<div class="long"><p class="eyebrow">${esc(f.label)}</p><p>${esc(doc[f.k])}</p></div>`).join('')}
@@ -185,6 +218,25 @@ export function mount(el, ctx) {
     });
   }
 
+  // ───────── Printed tags ─────────
+  function openTags() {
+    const e = entityById[current], list = rows().filter((d) => LABELS[current](d).code).slice(0, 300);
+    const sheet = `<div class="label-sheet">${list.map((d) => { const l = LABELS[current](d); return `<div class="label">${barcodeSvg(l.code)}<strong class="mono">${esc(l.code)}</strong>${l.lines.filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>`; }).join('')}</div>`;
+    const d = drawer(`<header class="drawer-head"><div><p class="eyebrow">Tags</p><h2>${esc(e.name)}</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button></header>
+      <div class="drawer-body stack">
+        <div class="row"><span>${list.length} tag${list.length === 1 ? '' : 's'} ${info('Tags are Code 128 barcodes that any handheld scanner reads. The list follows the search and status filter on the screen behind, so filter first to print only new records. Stick the tag on the roll, bundle or piece; scanning it anywhere in Deme opens the record or takes you to the right scan screen.', 'Printing tags')}</span><div class="spacer"></div>${api.mode === 'server' ? '<button class="btn btn-primary" type="button" data-print>Print</button>' : ''}</div>
+        ${list.length ? sheet : '<div class="empty"><p>Nothing to print.</p></div>'}
+      </div>`, { onClose: () => { open = null; } });
+    open = { ...d, mode: 'tags' };
+    const pb = $('[data-print]', d.el);
+    if (pb) pb.onclick = () => {
+      const area = document.createElement('div'); area.id = 'printArea'; area.innerHTML = sheet; document.body.appendChild(area);
+      document.documentElement.classList.add('printing');
+      const done = () => { document.documentElement.classList.remove('printing'); area.remove(); window.removeEventListener('afterprint', done); };
+      window.addEventListener('afterprint', done); window.print(); setTimeout(done, 60000);
+    };
+  }
+
   // ───────── Tally export ─────────
   async function openTally() {
     const openOnes = data.all('vouchers').filter((v) => v.status === 'open');
@@ -228,11 +280,32 @@ export function mount(el, ctx) {
         ['Gate and floor scanners', 'Barcodes typed into the scan screens.', 'Any handheld scanner that types like a keyboard already works on the Scan station and Dispatch gate screens. Nothing to connect.'],
       ];
       body.innerHTML = `<div class="toolbar"><div class="title-row"><h2>Connections</h2>${info('Links to systems outside Deme ERP. None is switched on yet; each note says how the work is done in the meantime and what the connection needs.', 'Connections')}</div></div>
-        <div class="panel"><ul class="conn">${C.map(([name, what, how], i) => `<li><div><strong>${esc(name)}</strong> ${info(how, name)}<br><span class="muted">${esc(what)}</span></div><span class="tag ${i === 4 ? 'tag-ok' : 'tag-plain'}">${i === 4 ? 'Works now' : 'Not connected'}</span></li>`).join('')}</ul></div>`;
+        <div class="panel"><ul class="conn">${C.map(([name, what, how], i) => `<li><div><strong>${esc(name)}</strong> ${info(how, name)}<br><span class="muted">${esc(what)}</span></div><span class="tag ${i === 4 ? 'tag-ok' : 'tag-plain'}">${i === 4 ? 'Works now' : 'Not connected'}</span></li>`).join('')}</ul></div>
+        ${api.mode === 'server' && isAdmin ? `<div class="toolbar"><div class="title-row"><h2>Service keys</h2>${info('A service key lets another program use Deme as if it were a person with one role: a scanner app at the gate, a camera\'s edge box posting inspection results, or the Tally bridge reading vouchers. The program sends the key in the Authorization header as "Bearer" followed by the key, and calls the same actions people use. The key is shown once; if it is lost, switch it off and make a new one.', 'Service keys')}</div><div class="spacer"></div></div>
+        <div class="panel panel-pad stack" id="keysBox"><p class="faint">Loading</p></div>` : ''}`;
+      if (api.mode === 'server' && isAdmin) renderKeys();
     }
   }
+  async function renderKeys(fresh = null) {
+    const box = $('#keysBox', body); if (!box) return;
+    try {
+      const keys = await api.keys.list();
+      if (!$('#keysBox', body)) return;
+      box.innerHTML = `${fresh ? `<div class="newkey"><p class="eyebrow">Copy this key now. It is not shown again.</p><code class="mono" id="newKey">${esc(fresh)}</code><button class="btn btn-sm btn-outline" type="button" data-copykey>Copy</button></div>` : ''}
+        ${keys.length ? `<ul class="conn keys">${keys.map((k) => `<li><div><strong>${esc(k.name)}</strong><br><span class="muted">Acts as ${esc(ROLES[k.role]?.name || k.role)} · <span class="mono">${esc(k.hint)}</span> · ${k.lastUsed ? `last used ${esc(k.lastUsed)}` : 'never used'}</span></div><button class="btn btn-sm ${k.active ? 'btn-quiet' : 'btn-outline'}" type="button" data-key="${k.id}" data-on="${k.active ? '0' : '1'}">${k.active ? 'Switch off' : 'Switch on'}</button></li>`).join('')}</ul>` : '<p class="faint">No service keys yet.</p>'}
+        <form class="row" id="keyForm"><input class="input" id="keyName" placeholder="What uses it, e.g. Gate scanner" aria-label="Key name" style="max-width:280px"><select class="select" id="keyRole" aria-label="Acts as" style="max-width:240px">${Object.entries(ROLES).map(([id, r]) => `<option value="${id}" ${id === 'logistics' ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select><button class="btn btn-primary" type="submit">Create key</button></form>`;
+    } catch (e) { box.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+  }
+  body.addEventListener('submit', (e) => {
+    if (e.target.id !== 'keyForm') return;
+    e.preventDefault();
+    busy(e.target.querySelector('[type="submit"]'), async () => { const out = await api.keys.create($('#keyName', body).value, $('#keyRole', body).value); renderKeys(out.key); });
+  });
   body.addEventListener('click', (e) => {
     if (module !== 'admin') return;
+    const kb = e.target.closest('[data-key]');
+    if (kb) return busy(kb, async () => { await api.keys.setActive(kb.dataset.key, kb.dataset.on === '1'); renderKeys(); });
+    if (e.target.closest('[data-copykey]')) { navigator.clipboard.writeText($('#newKey', body).textContent).then(() => toast('Key copied'), () => toast('Select the key and copy it by hand.', 'crit')); return; }
     if (e.target.closest('[data-reset]')) { const b = e.target.closest('[data-reset]'); if (b.dataset.sure) api.resetPreview(); else { b.dataset.sure = '1'; b.textContent = 'Tap again to erase everything in this browser'; } return; }
     const t = e.target.closest('[data-user]'); if (!t || !data.can('admin', 'admin')) return;
     openUser(t.dataset.user === 'new' ? null : t.dataset.user);

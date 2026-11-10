@@ -64,3 +64,20 @@ test('static files are served and paths cannot escape the web folder', async () 
   assert.notEqual((await fetch(`${base}/..%2Fpackage.json`)).status, 200);
   assert.notEqual((await fetch(`${base}/shared/..%2Fserver/index.js`)).status, 200);
 });
+
+test('a service key acts with its role and can be switched off', async () => {
+  const founder = (await call('POST', '/api/login', { email: 'founder@example.com', password: 'a-long-password' })).cookie;
+  const made = await call('POST', '/api/keys', { name: 'Gate scanner', role: 'logistics' }, founder);
+  assert.equal(made.status, 200);
+  assert.match(made.json.key, /^deme_[a-f0-9]{48}$/);
+  const withKey = async (method, path, body) => { const r = await fetch(base + path, { method, headers: { Authorization: `Bearer ${made.json.key}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, json: await r.json().catch(() => null) }; };
+  assert.equal((await withKey('GET', '/api/data/parcels')).status, 200, 'logistics can read parcels');
+  assert.equal((await withKey('GET', '/api/data/vouchers')).status, 403, 'but not finance');
+  assert.equal((await withKey('POST', '/api/action/gate.scan', { payload: { barcode: 'NOPE' } })).status, 400, 'actions run and report plainly');
+  assert.equal((await withKey('GET', '/api/keys')).status, 403, 'a key cannot manage keys');
+  assert.ok(!(await call('GET', '/api/keys', null, founder)).json.some((k) => k.hash || k.key), 'the key itself is never listed');
+  const events = await call('GET', '/api/events?after=0', null, founder);
+  assert.ok(events.json.length > 3 && events.json[0].seq < events.json[1].seq, 'the event feed is ordered');
+  await call('PUT', `/api/keys/${made.json.id}`, { active: false }, founder);
+  assert.equal((await withKey('GET', '/api/data/parcels')).status, 401);
+});

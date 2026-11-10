@@ -39,6 +39,8 @@ The same service runs in the browser over `localStorage` when the page is opened
 | `GET /api/audit?entity=&id=` | Audit trail |
 | `GET/POST /api/users`, `PUT /api/users/:id` | Team (admin) |
 | `GET /api/export/tally?ids=` | Tally import XML |
+| `GET /api/events?after=` | Ordered feed of everything that happened, for other services |
+| `GET/POST /api/keys`, `PUT /api/keys/:id` | Service keys (admin, signed in as a person) |
 
 ## Security
 
@@ -49,6 +51,44 @@ never only in the interface.
 
 Still to do before a wide rollout: HTTPS in front (required), password reset by email,
 two-step sign-in for admins, and off-site database backups.
+
+## Modules and services
+
+The product is built as separable parts that meet at one API, so each can be changed, scaled or
+replaced without touching the others.
+
+**Inside the core today** (one process, separate modules with no shared state except the store):
+
+| Module | Files | Owns |
+|---|---|---|
+| Records | `shared/schema.js`, `shared/service.js` | Data model, permissions, validation, audit |
+| Transactions | `shared/actions.js` | Purchasing, stock, quality, production, sales, logistics, finance, people steps |
+| Planning | `shared/engine.js`, `web/js/plan.js` | The schedule and what-if |
+| Go-live and tasks | `shared/golive.js` | The plan template and task steps |
+| Identity | `server/index.js` | Sign-in, sessions, service keys |
+| Storage | `server/db.js` | Nine functions over SQLite |
+
+**Services that run beside the core** (separate programs with their own service key; none can
+reach the database, only the API):
+
+| Service | Reads | Writes | State |
+|---|---|---|---|
+| Scanner apps and fixed scanners | — | `gate.scan`, `scan.start`, `scan.finish` | Works now with a key |
+| Tally bridge (on the accounts computer) | Open vouchers, `GET /api/events` | `vouchers.markSynced` | Planned: `docs/TALLY-CONNECTOR.md` |
+| Shopify sync | Shopify orders | `shop_orders`, stock and fulfilment back | Planned |
+| DHL tracking | DHL events by tracking number | `parcel.track`, `parcel.delivered` | Planned |
+| Notifier | `GET /api/events` | WhatsApp or SMS nudges | Planned |
+| Vision edge boxes | Camera streams | The same actions people use | Planned: `docs/VISION-PLAN.md` |
+
+The seam for all of them is the same: a service key that acts with one role, the action
+endpoints, and `GET /api/events?after=<seq>`, an ordered feed of everything that has happened.
+A service keeps the last `seq` it handled and asks for what came after, so it can stop and
+restart without missing or repeating anything.
+
+This is deliberate: one core that is simple to deploy and back up, with independent services at
+the edges where the outside world changes (couriers, shops, accounting, cameras). Splitting the
+core itself into separately deployed services would add failure points without a benefit at
+Deme's size; the module boundaries above are where it would be cut if that changes.
 
 ## Limits and the next step
 

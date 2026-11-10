@@ -3,7 +3,7 @@
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { dirname, join, normalize, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,8 @@ import { openDb } from './db.js';
 import { createService, UserError } from '../shared/service.js';
 import { ACTIONS } from '../shared/actions.js';
 import { vouchersToTallyXML } from '../shared/tally.js';
-import { COMPANY } from '../shared/schema.js';
+import { COMPANY, ROLES } from '../shared/schema.js';
+import { newId } from '../shared/service.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const scryptAsync = promisify(scrypt);
@@ -54,7 +55,21 @@ export function createApp({ dbFile = process.env.DEME_DB || join(root, 'data', '
   const cookieOf = (req) => Object.fromEntries((req.headers.cookie || '').split(';').map((p) => p.trim().split('=')).filter((p) => p[0]))[COOKIE];
   const secure = (req) => req.headers['x-forwarded-proto'] === 'https' || process.env.DEME_SECURE_COOKIES === '1';
   const setCookie = (req, token, maxAge) => `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure(req) ? '; Secure' : ''}`;
+  // Service keys let other programs (a scanner app, a camera's edge box, the Tally bridge) call the
+  // same API as a person, with the access of one role. Only a hash of the key is stored.
+  const keyHash = (key) => createHash('sha256').update(key).digest('hex');
+  function keyUser(req) {
+    const m = /^Bearer\s+(deme_[a-f0-9]{48})$/.exec(req.headers.authorization || '');
+    if (!m) return null;
+    const k = db.all('api_keys').find((x) => x.hash === keyHash(m[1]) && x.active);
+    if (!k) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    if (k.lastUsed !== today) { k.lastUsed = today; db.put('api_keys', k); }
+    return { id: `key:${k.id}`, name: k.name, role: k.role, extra: [], active: true, service: true };
+  }
+  const publicKey = (k) => ({ id: k.id, name: k.name, role: k.role, hint: k.hint, active: k.active, createdAt: k.createdAt, lastUsed: k.lastUsed || null });
   function sessionUser(req) {
+    const viaKey = keyUser(req); if (viaKey) return viaKey;
     const token = cookieOf(req); if (!token) return null;
     const s = db.sessions.get(token);
     if (!s || s.expires < Date.now()) return null;
@@ -73,7 +88,7 @@ export function createApp({ dbFile = process.env.DEME_DB || join(root, 'data', '
     // Changes must come from this site: a cross-site page cannot send JSON with our cookie.
     if (m !== 'GET') {
       const origin = req.headers.origin;
-      if (origin && new URL(origin).host !== req.headers.host) throw new UserError('Cross-site request refused.', 403);
+      if (origin && new URL(origin).host !== req.headers.host && !/^Bearer\s/.test(req.headers.authorization || '')) throw new UserError('Cross-site request refused.', 403);
     }
     const body = m === 'GET' || m === 'DELETE' ? {} : await readJson(req);
 
@@ -112,6 +127,30 @@ export function createApp({ dbFile = process.env.DEME_DB || join(root, 'data', '
     if (parts[0] === 'action' && parts[1] && m === 'POST') return send(res, 200, svc.act(user, parts[1], body));
     if (parts[0] === 'audit' && m === 'GET') return send(res, 200, svc.audit(user, { entity: url.searchParams.get('entity') || undefined, id: url.searchParams.get('id') || undefined }));
     if (parts[0] === 'mine' && m === 'GET') return send(res, 200, svc.mine(user));
+    // Everything that happened after a given point, oldest first: other services follow this feed.
+    if (parts[0] === 'events' && m === 'GET') {
+      if (!svc.can(user, 'admin', 'read')) throw new UserError('Your role cannot read the event feed.', 403);
+      return send(res, 200, db.logsAfter(Number(url.searchParams.get('after') || 0), Math.min(500, Number(url.searchParams.get('limit') || 200))));
+    }
+    if (parts[0] === 'keys') {
+      if (!svc.can(user, 'admin', 'admin') || user.service) throw new UserError('Only an admin signed in as a person can manage service keys.', 403);
+      if (m === 'GET') return send(res, 200, db.all('api_keys').map(publicKey));
+      if (m === 'POST') {
+        const name = String(body.name || '').trim();
+        if (!name) throw new UserError('Give the key a name that says what uses it.');
+        if (!ROLES[body.role]) throw new UserError('Choose the role this key acts as.');
+        const key = `deme_${randomBytes(24).toString('hex')}`;
+        const doc = { id: newId(), name, role: body.role, hash: keyHash(key), hint: `${key.slice(0, 9)}…${key.slice(-4)}`, active: true, createdAt: new Date().toISOString(), createdBy: user.id };
+        db.tx(() => { db.put('api_keys', doc); db.log({ at: doc.createdAt, user: user.id, userName: user.name, entity: 'api_keys', id: doc.id, action: 'created', text: `Service key created: ${name} (${ROLES[body.role].name})` }); });
+        return send(res, 200, { ...publicKey(doc), key });
+      }
+      if (m === 'PUT' && parts[1]) {
+        const doc = db.get('api_keys', parts[1]); if (!doc) throw new UserError('No such key.', 404);
+        doc.active = !!body.active;
+        db.tx(() => { db.put('api_keys', doc); db.log({ at: new Date().toISOString(), user: user.id, userName: user.name, entity: 'api_keys', id: doc.id, action: 'updated', text: `Service key ${doc.active ? 'switched on' : 'switched off'}: ${doc.name}` }); });
+        return send(res, 200, publicKey(doc));
+      }
+    }
     if (parts[0] === 'export' && parts[1] === 'tally' && m === 'GET') {
       const ids = (url.searchParams.get('ids') || '').split(',').filter(Boolean);
       const vs = svc.list(user, 'vouchers').filter((v) => (ids.length ? ids.includes(v.id) : v.status === 'open'));

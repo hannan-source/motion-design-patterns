@@ -43,11 +43,13 @@ instance (SQLite is a single-writer database; see `docs/ARCHITECTURE.md` for whe
 
 | Area | What it does |
 |---|---|
+| **Founder view** | Go-live progress by track and by team, and the business at a glance: fabric, production, sales, money, quality |
 | **Today** | What needs attention across the business, sales of the day, a getting-started checklist while lists are empty |
 | **Business map** | 3D model of suppliers, dye house, factory floor, channels and office. Places, flows, zones and parts are clickable and show live figures from the records |
 | **Production room** | Finite-capacity plan from open work orders, styles and work centres. Test a sample run, extra units, a demand jump, absences or a late fabric lot and see what moves |
 | **Scan station** | Tailors and masters scan bundles in and out; gives real minutes per piece |
 | **Dispatch gate** | One scan point for parcels out, returns in and store fit visits |
+| **Projects** | Kanban board and Gantt timeline over the same tasks. "Create the go-live plan" adds 53 dated tasks across 8 tracks with an owner for each |
 | **My day** | Check in and out, leave, own KRAs and tasks, for every person |
 | **ERP modules** | Masters, Purchasing, Inventory, Quality, Production, B2B sales, B2C sales, Logistics, Finance, People, Projects, Marketing, Design, Admin |
 
@@ -75,7 +77,7 @@ export as Tally import XML. Every change is in the audit trail.
 
 - Live connections to Shopify, DHL and Tally (CSV import, manual tracking updates and XML export
   cover them for now; `docs/TALLY-CONNECTOR.md` is the plan for Tally).
-- Camera reading of fabric defects and barcodes. Handheld scanners that type like a keyboard work today.
+- Camera reading of fabric defects and barcodes. Handheld scanners work today, and tags print from the app; `docs/VISION-PLAN.md` is the plan for cameras.
 - GST and statutory payroll deductions. Settle the tax treatment with Deme's accountant first.
 - Password reset by email (an admin sets a new password under Admin > Team).
 
