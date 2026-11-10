@@ -43,8 +43,8 @@ premium motion graphics without watching the originals.
 - Template slugs cited as `see: slug-a, slug-b` resolve to
   search the slug in the source template gallery.
 
-## Dema Intelligence Room
+## Deme ERP
 
-`dema/` holds a separate project: a 3D business map, production planner and ERP
-prototype for a resort-wear manufacturer. Its motion follows the principles in
-this library. See `dema/README.md` to run it.
+`deme/` holds a separate project: Deme ERP, a 3D business map, production planner and ERP
+with its own server, for a resort-wear manufacturer. Its motion follows the principles in
+this library. See `deme/README.md` to run it.

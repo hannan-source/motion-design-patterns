@@ -1,16 +1,16 @@
 # Tally connector
 
 A plan for connecting the ERP to Tally, so every factory event that moves money
-becomes a voucher in Dema's books without being keyed in twice.
+becomes a voucher in Deme's books without being keyed in twice.
 
-**Status.** The voucher export exists today: `js/tally.js` turns the ERP's
+**Status.** The voucher export exists today: `shared/tally.js` turns the ERP's
 vouchers into Tally import XML, and the Finance module shows it for copying. The
 bridge that posts it automatically is planned here and not yet built.
 
 **To confirm first.** This plan assumes Tally Prime on a Windows PC in the
 accounts office. The Tally version, whether it is single or multi-user, the
 company name, the chart of accounts and the GST setup must be confirmed against
-Dema's actual installation before any of this is switched on. Each point that
+Deme's actual installation before any of this is switched on. Each point that
 depends on that is marked **Confirm**.
 
 Contents:
@@ -70,7 +70,7 @@ ERP API (cloud)  ◀──HTTPS──▶  Bridge (accounts PC)  ◀──HTTP :9
 ```
 
 The bridge only makes outbound calls to the ERP. No inbound port is opened on
-Dema's network.
+Deme's network.
 
 ### The loop
 
@@ -80,7 +80,7 @@ Every few minutes:
    "Tally closed" to the ERP and stop this round.
 2. **Fetch.** Ask the ERP API for vouchers with status `queued`, oldest first,
    in small batches.
-3. **Post.** For each voucher, build the XML (the same format `js/tally.js`
+3. **Post.** For each voucher, build the XML (the same format `shared/tally.js`
    produces) and `POST` it to Tally. One voucher per request, so one bad voucher
    cannot block the rest.
 4. **Read the answer.** Tally replies with a `RESPONSE` block:
@@ -126,7 +126,7 @@ guards against duplicates in three ways:
 Tally also supports a `REMOTEID` attribute on a voucher, which lets a later
 import with the same id alter the voucher instead of creating a new one. We
 intend to set it to the ERP voucher number. Its exact behaviour should be tested
-on Dema's Tally version before it is relied on. **Confirm.**
+on Deme's Tally version before it is relied on. **Confirm.**
 
 ### What the bridge never does
 
@@ -140,7 +140,7 @@ on Dema's Tally version before it is relied on. **Confirm.**
 ## 3. Event to voucher mapping
 
 Each factory event that moves money maps to one voucher type and two ledgers.
-Ledger names below are the ones used in the example data. Dema's real names
+Ledger names below are the starter ledgers the ERP creates at setup. Deme's real names
 replace them (section 5).
 
 | Factory event | Voucher type | Debit | Credit | Amount | Source link |
@@ -167,7 +167,7 @@ Notes on the mapping:
   its own ledger gives the founder one number to watch, and it should fall as
   the inspection gate takes hold.
 - **Purchase timing.** The mapping books the fabric purchase at the goods receipt
-  and reverses a failed roll with a debit note, which is what `erp.js` does. If the
+  and reverses a failed roll with a debit note, which is what the ERP does (`shared/actions.js`). If the
   accountant prefers to book only when a roll passes, only the first two rows change. **Confirm.**
 - **Shopify clearing.** Sales are booked per order to a clearing ledger and the
   payout clears it. Fees and refunds inside a payout need a rule agreed with the
@@ -177,7 +177,7 @@ Notes on the mapping:
   creates them itself where the accountant asks for that.
 - **Export sales** are invoiced in USD. How the foreign currency amount and
   exchange rate are carried on the voucher depends on whether multi-currency is
-  enabled in Dema's Tally. **Confirm.**
+  enabled in Deme's Tally. **Confirm.**
 - **Wages** are out of scope for the first version.
 
 ---
@@ -185,7 +185,7 @@ Notes on the mapping:
 ## 4. Worked XML
 
 These two examples are what `vouchersToTallyXML(vouchers, companyName)` in
-`js/tally.js` produces for two vouchers from the example data. Dates and names
+`shared/tally.js` produces for two sample vouchers. Dates and names
 are examples.
 
 Tally's sign convention, which the code follows:
@@ -209,7 +209,7 @@ Twelve rolls of cotton voile pass inspection. ₹2,48,600 is owed to the mill.
    <REQUESTDESC>
     <REPORTNAME>Vouchers</REPORTNAME>
     <STATICVARIABLES>
-     <SVCURRENTCOMPANY>Dema</SVCURRENTCOMPANY>
+     <SVCURRENTCOMPANY>Deme</SVCURRENTCOMPANY>
     </STATICVARIABLES>
    </REQUESTDESC>
    <REQUESTDATA>
@@ -258,7 +258,7 @@ back.
    <REQUESTDESC>
     <REPORTNAME>Vouchers</REPORTNAME>
     <STATICVARIABLES>
-     <SVCURRENTCOMPANY>Dema</SVCURRENTCOMPANY>
+     <SVCURRENTCOMPANY>Deme</SVCURRENTCOMPANY>
     </STATICVARIABLES>
    </REQUESTDESC>
    <REQUESTDATA>
@@ -318,10 +318,10 @@ So masters are pulled from Tally before any voucher is pushed to it.
    Tally and sends them to the ERP.
 2. **Map.** In the ERP, each supplier, customer and account the factory events
    use is mapped once to a Tally ledger, on a screen the accountant fills in.
-   The example names in this document are replaced by Dema's.
+   The example names in this document are replaced by Deme's.
 3. **Hold.** A voucher whose ledgers are not all mapped stays in `needs mapping`
    and is not sent. The Finance module lists what is missing. `ledgersUsed()` in
-   `js/tally.js` already produces that list.
+   `shared/tally.js` already produces that list.
 4. **New parties.** When a new mill or buyer appears, the ERP asks the
    accountant to pick or create the Tally ledger. The bridge can create a ledger
    on approval, under the group the accountant chooses. It never creates one on
@@ -334,7 +334,7 @@ for post-dye defects, a Shopify clearing ledger, and possibly separate ledgers
 for dyeing charges and purchase returns. **Confirm** the names and groups with
 the accountant.
 
-Stock items are only needed if Dema keeps inventory in Tally. If Tally is used
+Stock items are only needed if Deme keeps inventory in Tally. If Tally is used
 for accounts only, the ERP is the stock record and Tally receives values, not
 quantities. **Confirm.**
 
@@ -343,10 +343,10 @@ quantities. **Confirm.**
 ## 6. GST: open item
 
 GST is deliberately not built into the examples above. It has to be settled
-with Dema's accountant, not guessed. The questions:
+with Deme's accountant, not guessed. The questions:
 
 1. **Tax ledgers.** The names of the input and output CGST, SGST and IGST
-   ledgers in Dema's Tally, and whether tax is calculated by Tally from the
+   ledgers in Deme's Tally, and whether tax is calculated by Tally from the
    stock item and party, or posted as explicit ledger lines.
 2. **Invoice mode.** Whether purchases and sales are entered as item invoices
    (with stock items, quantity, rate, HSN) or as accounting vouchers. Item
@@ -365,7 +365,7 @@ with Dema's accountant, not guessed. The questions:
    port code).
 7. **Online and store sales.** Tax treatment of Shopify orders shipped abroad
    versus within India, and of store sales.
-8. **E-invoicing and e-way bills.** Whether they apply to Dema, and whether
+8. **E-invoicing and e-way bills.** Whether they apply to Deme, and whether
    they are raised from Tally or elsewhere. The bridge must not get in the way
    of whichever it is.
 9. **Returns filing.** Which reports the accountant files from Tally, so the
@@ -413,7 +413,7 @@ accepted note on why they differ.
 | The accounts PC is off or offline | The ERP stops hearing from the bridge | Same as above. An alert after an agreed number of hours |
 | Ledger does not exist | `LINEERROR` names the ledger | Voucher marked `failed: ledger missing`, sent to mapping. Others carry on |
 | Voucher date is in a locked or closed period | `LINEERROR` on the date | Voucher held for the accountant to choose a date or reopen the period |
-| Voucher type missing or named differently | `LINEERROR` on the voucher type | Fixed once in the mapping. **Confirm** Dema's voucher type names |
+| Voucher type missing or named differently | `LINEERROR` on the voucher type | Fixed once in the mapping. **Confirm** Deme's voucher type names |
 | Request times out | No response | Bridge checks Tally for the voucher number before any resend (section 2) |
 | Same voucher sent twice | Tally refuses it if Prevent Duplicates is on | Marked `synced` after the check finds the original |
 | Voucher edited or deleted in Tally | Daily reconciliation | Flagged to the accountant. The ERP is not changed silently |
