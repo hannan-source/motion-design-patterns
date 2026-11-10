@@ -1,0 +1,121 @@
+/* Business map: the canvas fills the stage; chips, labels and the inspector float over it. */
+.map { position: absolute; inset: 0; overflow: hidden; background: var(--scene-ground); }
+.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+.map-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+.map-top, .map-home, .map-help { z-index: 3; }
+
+.map-label {
+  position: absolute; left: 0; top: 0; pointer-events: auto; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font: 600 11.5px/1.4 var(--font-body); box-shadow: var(--shadow-1); will-change: transform;
+  transition: background .2s, color .2s, border-color .2s, opacity .25s;
+}
+.map-label.is-crowded { opacity: 0; pointer-events: none; }
+.map-label i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+.map-label[data-level="warn"] i { background: var(--warn); }
+.map-label[data-level="crit"] i { background: var(--crit); box-shadow: 0 0 0 3px var(--crit-soft); }
+.map-label.is-hover { border-color: var(--ink-2); }
+.map-label.is-selected { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.map-zone {
+  position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform;
+  font: 500 10.5px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3);
+}
+
+.map-top {
+  position: absolute; top: 14px; left: var(--gutter-l); right: 420px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; pointer-events: none;
+}
+.map-top > * { pointer-events: auto; }
+.map-layers { display: flex; gap: 6px; flex-wrap: wrap; }
+.map-layers .chip { box-shadow: var(--shadow-1); background: var(--surface); }
+.map-layers .chip[aria-pressed="false"] { background: var(--surface-2); box-shadow: none; }
+.map-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px 8px 12px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1); font-size: 13px; }
+.map.is-touring .map-help { display: none; }
+.map-help { position: absolute; left: var(--gutter-l); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); font-size: 12px; pointer-events: none; }
+.map-home { position: absolute; left: var(--gutter-l); bottom: calc(40px + env(safe-area-inset-bottom, 0px)); box-shadow: var(--shadow-1); }
+
+/* Inspector */
+.map-inspector {
+  position: absolute; top: 14px; right: var(--gutter-r); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 388px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-2);
+  display: flex; flex-direction: column; overflow: hidden; z-index: 4;
+}
+.sheet-grip { display: none; }
+.insp-body { flex: 1; overflow-y: auto; padding: 20px 20px 24px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; }
+.insp-body h2 { font-size: 23px; font-weight: 750; letter-spacing: -.02em; }
+.insp-body h3 { font-size: 13.5px; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.insp-body section { padding-top: 14px; border-top: 1px solid var(--line); }
+.insp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: -8px; }
+.insp-top .btn { margin-right: -8px; }
+.count { font: 500 11px/1 var(--font-mono); padding: 3px 6px; border-radius: 999px; background: var(--surface-3); color: var(--ink-2); }
+.fine { font-size: 12px; }
+.insp-status { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.insp-status .pill { flex: none; margin-top: 1px; }
+.insp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.insp-actions:empty { display: none; }
+
+.metrics { display: grid; grid-template-columns: 1fr; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
+.metrics > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 12px; }
+.metrics > div + div { border-top: 1px solid var(--line); }
+.metrics dt { color: var(--ink-2); font-size: 12.5px; }
+.metrics dd { font-size: 12.5px; font-weight: 500; text-align: right; }
+
+.issue-list { display: flex; flex-direction: column; margin: 0 -8px; }
+.issue-list button {
+  width: 100%; display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 8px; border: 0; background: none; border-radius: var(--r-sm); font-size: 13px; line-height: 1.4;
+}
+.issue-list button:hover { background: var(--surface-2); }
+.lvl { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--warn); }
+.lvl-crit { background: var(--crit); box-shadow: 0 0 0 3px var(--crit-soft); }
+.tour-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tour-list .dot, .tour-meta .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.legend { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.legend dt { font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.legend dd { color: var(--ink-2); padding-left: 17px; }
+.map .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+.plain { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.plain li { position: relative; padding-left: 16px; }
+.plain li::before { content: ""; position: absolute; left: 2px; top: 8px; width: 6px; height: 2px; border-radius: 1px; background: var(--ink-3); }
+.plain.today li::before { background: var(--warn); }
+.plain.change li::before { background: var(--ok); }
+.sys-list { display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.sys-list li { display: grid; grid-template-columns: 112px 1fr; gap: 10px; align-items: start; }
+.sys-list .tag { white-space: nowrap; font-size: 10.5px; }
+.sys-list .tag { justify-self: start; }
+.flow-list { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 12px; font-size: 12.5px; }
+.flow-list li { display: grid; grid-template-columns: 82px 1fr; gap: 2px 8px; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.flow-list li:last-child { border-bottom: 0; }
+.flow-list .tag { justify-self: start; }
+.flow-list .link { grid-column: 2; justify-self: start; }
+.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 500; text-align: left; }
+.link:hover { text-decoration: underline; }
+
+/* Tour caption */
+.map-tour {
+  position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(calc(-50% - 202px));
+  width: min(560px, calc(100% - 460px)); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; z-index: 5;
+}
+.tour-meta { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.tour-meta .num { margin-left: auto; }
+.map-tour p { font: 500 16px/1.4 var(--font-display); letter-spacing: -.005em; animation: rise .5s var(--ease-out); }
+.tour-nav { display: flex; gap: 6px; }
+.tour-nav .btn-quiet { margin-left: auto; }
+
+@media (max-width: 860px) {
+  .map-top { right: var(--gutter-r); top: 10px; }
+  .map-layers .chip { padding: 5px 9px; font-size: 12px; }
+  .map-help, .map-home { display: none; }
+  .map-label { font-size: 10.5px; padding: 2px 7px 2px 6px; }
+  .map-inspector {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 46%; border-radius: var(--r-lg) var(--r-lg) 0 0; border-width: 1px 0 0;
+    transform: translateY(calc(100% - 132px)); transition: transform .5s var(--ease-out); padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .map-inspector.is-open { transform: none; }
+  .sheet-grip { display: grid; place-items: center; height: 22px; border: 0; background: none; flex: none; width: 100%; }
+  .sheet-grip i { width: 38px; height: 4px; border-radius: 2px; background: var(--line-2); }
+  .insp-body { padding: 4px var(--gutter-r) 20px var(--gutter-l); }
+  .map-tour { left: var(--gutter-l); right: var(--gutter-r); width: auto; transform: none; bottom: auto; top: 54px; }
+  .map-tour p { font-size: 14.5px; }
+}

@@ -42,3 +42,9 @@ premium motion graphics without watching the originals.
 - Durations are given as ranges observed across the catalog's described pacing.
 - Template slugs cited as `see: slug-a, slug-b` resolve to
   search the slug in the source template gallery.
+
+## Dema Intelligence Room
+
+`dema/` holds a separate project: a 3D business map, production planner and ERP
+prototype for a resort-wear manufacturer. Its motion follows the principles in
+this library. See `dema/README.md` to run it.
