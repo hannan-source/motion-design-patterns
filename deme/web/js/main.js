@@ -20,16 +20,15 @@ const slug = (id) => id.replace(/_/g, '-');
 const unslug = (s) => s.replace(/-/g, '_');
 
 const app = document.getElementById('app');
-let cleanup = null, stopField = null, pending = {};
+let cleanup = null, stopField = null, pending = {}, routeTurn = 0;
 
 /** What this person can open, in menu order. */
 function menu() {
   const c = data.can;
   const works = ['production', 'inventory', 'quality', 'b2b', 'b2c', 'logistics', 'finance', 'purchasing'].some((m) => c(m, 'read'));
   const top = [], floor = [], mods = [];
-  if (works) top.push(['home', 'Today']);
   if (c('admin', 'admin')) top.push(['pulse', 'Founder view']);
-  if (works) top.push(['map', 'Business map']);
+  if (works) top.push(['home', 'Today'], ['map', 'Business map']);
   if (c('production', 'read') || c('b2b', 'read') || c('design', 'read')) top.push(['room', 'Production room']);
   if (c('production', 'scan')) floor.push(['scan', 'Scan station']);
   if (c('logistics', 'write') || c('b2c', 'write') || c('production', 'write')) floor.push(['gate', 'Dispatch gate']);
@@ -96,6 +95,7 @@ async function route() {
   const allowed = new Set([...m.top, ...m.floor, ...m.mods].map((x) => x[0]));
   if (!r || !(allowed.has(r.name) || (r.module && allowed.has(`m-${r.module}`)))) { location.replace(`#${firstRoute()}`); return; }
   const opts = pending; pending = {};
+  const turn = ++routeTurn; // a newer navigation cancels this one
   if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
   document.querySelector('.drawer-wrap')?.remove();
   document.querySelectorAll('.rail a').forEach((a) => { const on = a.dataset.route === r.name || (r.module && a.dataset.route === `m-${r.module}`); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
@@ -104,6 +104,7 @@ async function route() {
   const view = $('#view'); view.innerHTML = ''; view.dataset.view = r.view;
   try {
     const mod = await VIEWS[r.view]();
+    if (turn !== routeTurn) return;
     cleanup = mod.mount(view, { ...ctx, opts, route: r }) || null;
     if (opts.code) { const box = view.querySelector('#gtBarcode, #scBundle'); if (box) { box.value = opts.code; box.dispatchEvent(new Event('input', { bubbles: true })); box.focus(); } }
   } catch (e) {
@@ -180,8 +181,7 @@ async function enter() {
   stopField?.(); stopField = null;
   await data.load();
   shell();
-  if (!parse()) location.replace(`#${firstRoute()}`);
-  route();
+  if (parse()) route(); else location.replace(`#${firstRoute()}`); // the hash change starts the route
 }
 
 async function start() {

@@ -38,7 +38,7 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function nextMonday() { const d = today(); do d.setDate(d.getDate() + 1); while (d.getDay() !== 1); return iso(d); }
 
 // What the person last chose here, kept while the app is open.
-const mem = { project: null, view: 'board', group: 'none', zoom: 'weeks', owner: '', person: '', track: '', mine: false, late: false, q: '', allDone: false, filtersOpen: false, closed: new Set(), planStart: '' };
+const mem = { project: null, view: 'board', group: 'none', lanes: new Map(), zoom: 'weeks', owner: '', person: '', track: '', mine: false, late: false, q: '', allDone: false, filtersOpen: false, closed: new Set(), planStart: '' };
 
 export function mount(el, ctx) {
   const canP = () => data.canWrite('projects'), canT = () => data.canWrite('tasks');
@@ -117,31 +117,32 @@ export function mount(el, ctx) {
     const last = Math.max(...rows.map((r) => r.e)), weeks = Math.ceil((last + 1) / 7), span = weeks * 7;
     const pc = (x) => `${((x / span) * 100).toFixed(3)}%`;
     const fig = (n, label) => `<div><p class="tk-plan-n">${esc(num(n))}</p><p class="eyebrow">${esc(label)}</p></div>`;
-    return `
-      <div class="tk-plan-figs">${fig(GOLIVE_TEMPLATE.length, 'Tasks')}${fig(TRACKS.length, 'Tracks')}${fig(weeks, weeks === 1 ? 'Week' : 'Weeks')}</div>
-      <p class="tk-plan-range">${esc(day(iso(from)))} to ${esc(day(addDays(first, last)))}</p>
+    return {
+      figs: `<div class="tk-plan-figs">${fig(GOLIVE_TEMPLATE.length, 'Tasks')}${fig(TRACKS.length, 'Tracks')}${fig(weeks, weeks === 1 ? 'Week' : 'Weeks')}</div><p class="tk-plan-range">${esc(day(iso(from)))} to ${esc(day(addDays(first, last)))}</p>`,
+      mini: `
       <div class="tk-mini" role="img" aria-label="The ${TRACKS.length} tracks across ${weeks} weeks">
         <div class="tk-mini-axis" aria-hidden="true">${Array.from({ length: weeks }, (_, w) => `<span style="left:${pc(w * 7)}">${esc(day(addDays(first, w * 7)))}</span>`).join('')}</div>
         ${TRACKS.map(([k, name]) => { const mine = rows.filter((r) => r.track === k); return `<div class="tk-mini-row" style="--tc:${tc(k)}"><span class="tk-mini-name"><i class="tk-swatch"></i>${esc(name)}</span><span class="tk-mini-n">${mine.length}</span><span class="tk-mini-lane" style="--weeks:${weeks}">${mine.map((r) => `<i style="left:${pc(r.s)};width:${pc(r.e - r.s + 1)}"></i>`).join('')}</span></div>`; }).join('')}
-      </div>`;
+      </div>` };
   }
   function drawPlan() {
     const host = box('tkPlan');
     if (golive() || !canP()) { host.innerHTML = ''; host.hidden = true; return; }
     if ($('#tkPlanStart', host)) return; // already drawn: leave the date being chosen alone
-    const start = mem.planStart || nextMonday();
+    const start = mem.planStart || nextMonday(), prev = planPreview(start);
     host.hidden = false;
     host.innerHTML = `
       <section class="panel tk-plan" aria-labelledby="tkPlanH">
         <div class="tk-plan-main">
           <p class="eyebrow">Go live with Deme ERP</p>
           <div class="title-row"><h2 id="tkPlanH">Create the go-live plan</h2>${info('This creates a project with every step each team takes to bring the ERP into daily use, in eight tracks. The dates and the owners are a proposal: after it is created you can move any task, change its length, give it to a person or delete it.', 'Go-live plan')}</div>
+          <div id="tkPlanFigs">${prev.figs}</div>
           <div class="tk-plan-form">
             <div class="field"><label for="tkPlanStart">Start date</label><input class="input" type="date" id="tkPlanStart" value="${esc(start)}"></div>
             <button class="btn btn-primary tk-big" type="button" id="tkPlanCreate">Create the plan</button>
           </div>
         </div>
-        <div class="tk-plan-prev" id="tkPlanPrev">${planPreview(start)}</div>
+        <div class="tk-plan-prev" id="tkPlanPrev">${prev.mini}</div>
       </section>`;
   }
 
@@ -193,7 +194,7 @@ export function mount(el, ctx) {
     const n = filterCount();
     host.innerHTML = `
       <div class="tk-controls${mem.filtersOpen ? ' is-open' : ''}">
-        ${seg('view', mem.view, [['board', 'Board'], ['timeline', 'Timeline']], 'View')}
+        ${seg('mode', mem.view, [['board', 'Board'], ['timeline', 'Timeline']], 'View')}
         ${mem.view === 'board' ? `<div class="tk-seg-wrap"><span class="eyebrow">Group</span>${seg('group', mem.group, [['none', 'None'], ['track', 'Track'], ['owner', 'Owner']], 'Group by')}</div>` : `<div class="tk-seg-wrap"><span class="eyebrow">Zoom</span>${seg('zoom', mem.zoom, [['weeks', 'Weeks'], ['days', 'Days']], 'Zoom')}</div>`}
         <button type="button" class="tk-toggle tk-filter-btn" data-filters aria-expanded="${mem.filtersOpen}">Filters${n ? ` (${n})` : ''}</button>
         <div class="tk-filters">
@@ -246,11 +247,12 @@ export function mount(el, ctx) {
     const laneHtml = (g) => {
       const mine = view.filter((t) => inGroup(t, g));
       if (lanes && !mine.length) return '';
-      const done = mine.filter((t) => t.status === 'done').length;
+      const done = mine.filter((t) => t.status === 'done').length, key = `${mem.group}:${g.k}`;
+      const shown = !lanes || mine.some((t) => t.id === asking) || (mem.lanes.has(key) ? mem.lanes.get(key) : done < mine.length);
       return `
         <section class="tk-lane" ${g.c ? `style="--tc:${g.c}"` : ''}>
-          ${lanes ? `<header class="tk-lane-head"><div class="tk-lane-label">${g.c ? '<i class="tk-swatch"></i>' : ''}<h3>${esc(g.name)}</h3><span class="tk-lane-n">${done}/${mine.length} done</span><span class="tk-lane-bar"><i style="--v:${((done / mine.length) * 100).toFixed(1)}%"></i></span></div></header>` : ''}
-          <div class="tk-cells">${STATUSES.map(([k, name]) => { const cards = by[k].filter((t) => inGroup(t, g)); return `<div class="tk-cell" data-col="${k}" data-lane="${esc(g.k)}" aria-label="${esc(name)}${lanes ? `, ${esc(g.name)}` : ''}">${cards.map((t) => cardHtml(t, T)).join('')}${!cards.length && !lanes ? '<p class="tk-cell-none">Nothing here</p>' : ''}</div>`; }).join('')}</div>
+          ${lanes ? `<header class="tk-lane-head"><button type="button" class="tk-lane-label" id="tkn-${esc(key.replace(':', '-'))}" data-lane-fold="${esc(key)}" aria-expanded="${shown}">${ICON.chev}${g.c ? '<i class="tk-swatch"></i>' : ''}<h3>${esc(g.name)}</h3><span class="tk-lane-n">${done}/${mine.length} done</span><span class="tk-lane-bar"><i style="--v:${((done / mine.length) * 100).toFixed(1)}%"></i></span>${done === mine.length ? `<span class="tk-lane-tick">${ICON.tick}</span>` : ''}</button></header>` : ''}
+          ${!shown ? '' : `<div class="tk-cells">${STATUSES.map(([k, name]) => { const cards = by[k].filter((t) => inGroup(t, g)); return `<div class="tk-cell" data-col="${k}" data-lane="${esc(g.k)}" aria-label="${esc(name)}${lanes ? `, ${esc(g.name)}` : ''}">${cards.map((t) => cardHtml(t, T)).join('')}${!cards.length && !lanes ? '<p class="tk-cell-none">Nothing here</p>' : ''}</div>`; }).join('')}</div>`}
         </section>`;
     };
     const more = doneAll.length > DONE_CAP ? `<button type="button" class="link tk-alldone" data-alldone>${mem.allDone ? `Show latest ${DONE_CAP}` : `Show all ${esc(num(doneAll.length))}`}</button>` : '';
@@ -278,10 +280,11 @@ export function mount(el, ctx) {
     gantt = { start, days, dw, lw, key: `${project()}|${mem.zoom}|${narrow}` };
 
     // Axis: months, week-start dates, and single days when zoomed in.
-    let months = '', weeks = '', dayCells = '';
+    let months = '', weeks = '', dayCells = '', from = 0;
+    const month = (a, b) => { const d = d0(addDays(start, a)); return `<div class="tk-g-month" style="--n:${b - a}">${(b - a) * dw > 96 ? `<span>${esc(MONTHS[d.getMonth()])} ${d.getFullYear()}</span>` : ''}</div>`; };
     for (let i = 0; i < days; i++) {
       const d = d0(addDays(start, i));
-      if (i === 0 || d.getDate() === 1) { const next = new Date(d.getFullYear(), d.getMonth() + 1, 1); if (i > 0 || dayDiff(iso(d), iso(next)) * dw > 110) months += `<span class="tk-g-month" style="--s:${i}">${esc(MONTHS[d.getMonth()])} ${d.getFullYear()}</span>`; }
+      if (i > 0 && d.getDate() === 1) { months += month(from, i); from = i; }
       if (i % 7 === 0) weeks += `<span class="tk-g-week" style="--s:${i}">${esc(fmtDate(d))}</span>`;
       if (mem.zoom === 'days') dayCells += `<span class="tk-g-day${d.getDay() === 0 ? ' is-off' : ''}${i === t0 ? ' is-today' : ''}" style="--s:${i}"><i>${DOW[d.getDay()]}</i>${d.getDate()}</span>`;
     }
@@ -321,7 +324,7 @@ export function mount(el, ctx) {
       <div class="tk-legend" aria-label="Key">${key('tk-bar is-todo', 'To do')}${key('tk-bar is-doing', 'Doing')}${key('tk-bar is-done', 'Done')}${key('tk-bar is-blocked', 'Blocked')}${key('tk-bar is-todo is-late', 'Late')}<span class="tk-key"><span class="tk-bar-ask">${ICON.ask}</span>Ask someone</span></div>
       <div class="tk-g${mem.zoom === 'days' ? ' is-days' : ''}" id="tkGantt" tabindex="0" role="group" aria-label="Timeline" style="--dw:${dw}px;--days:${days};--lw:${lw}px;--t:${t0}">
         <div class="tk-g-in">
-          <div class="tk-g-head"><div class="tk-g-corner"><span class="eyebrow">Task</span></div><div class="tk-g-axis" aria-hidden="true">${months}${weeks}${dayCells}<span class="tk-g-now">Today</span></div></div>
+          <div class="tk-g-head"><div class="tk-g-corner"><span class="eyebrow">Task</span></div><div class="tk-g-axis" aria-hidden="true"><div class="tk-g-months">${months}${month(from, days)}</div>${weeks}${dayCells}<span class="tk-g-now">Today</span></div></div>
           <div class="tk-g-body"><div class="tk-g-grid" aria-hidden="true"><i class="tk-g-today"></i></div>${groups.map(groupHtml).join('')}${looseHtml}</div>
         </div>
       </div>`;
@@ -678,13 +681,13 @@ export function mount(el, ctx) {
   // ───────── Events ─────────
   const onClick = (e) => {
     if (Date.now() < quietUntil) return;
-    const t = e.target, hit = (sel) => t.closest(sel);
+    const t = e.target, hit = (sel) => { const n = t.closest(sel); return n && root.contains(n) ? n : null; };
     let b;
     if ((b = hit('[data-project]'))) { mem.project = b.dataset.project; mem.allDone = false; asking = null; render(); }
     else if (hit('#tkNewProject')) projectForm();
     else if ((b = hit('#tkPlanCreate'))) busy(b, async () => { const out = await api.act('golive.create', { start: $('#tkPlanStart', root).value }); mem.project = out.data?.project || golive()?.id || 'all'; toast(out.message || 'Go-live plan created.'); render(); });
     else if ((b = hit('[data-trackf]'))) { mem.track = mem.track === b.dataset.trackf ? '' : b.dataset.trackf; render(); }
-    else if ((b = hit('[data-view]'))) { mem.view = b.dataset.view; asking = null; render(); }
+    else if ((b = hit('[data-mode]'))) { mem.view = b.dataset.mode; asking = null; render(); }
     else if ((b = hit('[data-group]'))) { mem.group = b.dataset.group; render(); }
     else if ((b = hit('[data-zoom]'))) { mem.zoom = b.dataset.zoom; render(); }
     else if ((b = hit('[data-toggle]'))) { mem[b.dataset.toggle] = !mem[b.dataset.toggle]; render(); }
@@ -697,6 +700,7 @@ export function mount(el, ctx) {
     else if ((b = hit('[data-to]'))) { const id = b.closest('.tk-card').dataset.task; closeMenus(); moveTo(id, b.dataset.to); }
     else if ((b = hit('[data-go]'))) { const task = data.get('tasks', b.dataset.go); if (task?.opens) ctx.go(task.opens); }
     else if (hit('[data-block-cancel]')) { asking = null; render(); }
+    else if ((b = hit('[data-lane-fold]'))) { mem.lanes.set(b.dataset.laneFold, b.getAttribute('aria-expanded') !== 'true'); render(); }
     else if ((b = hit('[data-fold]'))) { const k = b.dataset.fold; if (mem.closed.has(k)) mem.closed.delete(k); else mem.closed.add(k); render(); }
     else if ((b = hit('[data-setdates]'))) openTask(b.dataset.setdates, 'tkdStart');
     else if ((b = hit('[data-open]'))) openTask(b.dataset.open);
@@ -708,7 +712,7 @@ export function mount(el, ctx) {
     if (c.id === 'tkOwner') { mem.owner = c.value; render(); }
     else if (c.id === 'tkPerson') { mem.person = c.value; render(); }
     else if (c.id === 'tkTrack') { mem.track = c.value; render(); }
-    else if (c.id === 'tkPlanStart' && c.value) { mem.planStart = c.value; box('tkPlanPrev').innerHTML = planPreview(c.value); }
+    else if (c.id === 'tkPlanStart' && c.value) { mem.planStart = c.value; const prev = planPreview(c.value); box('tkPlanFigs').innerHTML = prev.figs; box('tkPlanPrev').innerHTML = prev.mini; }
   };
   const onInput = (e) => { if (e.target.id === 'tkSearch') { mem.q = e.target.value; redrawMain(); } };
   const onSubmit = (e) => {

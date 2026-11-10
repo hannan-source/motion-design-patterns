@@ -3,7 +3,7 @@
 // record changes, and each block appears only when the records behind it can be read.
 
 import { api, data } from './api.js';
-import { info, esc, inr, num, fmtDate, fmtStamp, $, $$ } from './ui.js';
+import { info, esc, inr, num, fmtDate, fmtStamp, $ } from './ui.js';
 import { mountField } from './fx.js';
 import { FUNCTIONS, TRACKS } from '../shared/golive.js';
 import { STAGES, STAGE_NAMES } from '../shared/schema.js';
@@ -12,7 +12,7 @@ import { iso, today, workdayIndex } from '../shared/util.js';
 const ARROW = '<svg class="pl-arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const TICK = '<svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICONS = {
-  stock: '<path d="M5 20v-5M12 20v-8M19 20v-3" fill="none"/><path d="M3 8h18" fill="none" stroke-dasharray="2 3"/>',
+  stock: '<path d="M6 20V6M12 20v-5M18 20v-3" fill="none"/><path d="M3 11.5h18" fill="none" stroke-dasharray="1.5 3"/>',
   machine: '<path d="M4 9h11a4 4 0 0 1 4 4v2h-4v-2H9v6H4z" fill="none"/><path d="M17 15v3M2.5 19h19" fill="none"/>',
   parcel: '<path d="M4 8l8-4 8 4v8l-8 4-8-4z" fill="none"/><path d="M4 8l8 4 8-4M12 12v8" fill="none"/>',
   sample: '<path d="M4 4h8l8 8-8 8-8-8z" fill="none"/><circle cx="8.5" cy="8.5" r="1.3" fill="none"/>',
@@ -212,7 +212,7 @@ export function mount(el, ctx) {
             <span class="pl-stn-name">${esc(t.name)}</span>
             <span class="pl-stn-count"><b>${esc(num(t.done))}</b> / ${esc(num(t.total))}</span>
             <span class="tag tag-${STATE[t.state][0]}">${esc(t.state === 'late' ? `${num(t.late)} late` : STATE[t.state][1])}</span>
-            <span class="pl-stn-own">${esc(t.owners.map(fnShort).join(' · '))}</span>
+            <span class="pl-stn-own">${esc(t.owners.map(fnShort).join(', '))}</span>
           </button></li>`).join('')}</ol>
       </div>`;
 
@@ -226,7 +226,7 @@ export function mount(el, ctx) {
             <span class="pl-own-bar">${stack(o, (o.total / most) * 100)}</span>
             <span class="pl-own-n"><b>${esc(num(o.done))}</b> / ${esc(num(o.total))}</span>
             <span class="pl-own-late">${o.late ? `<span class="tag tag-crit">${esc(`${num(o.late)} late`)}</span>` : ''}</span>
-            <span class="pl-own-who">${o.people.length ? `${o.people.slice(0, 3).map((n) => `<span class="pl-face" title="${esc(n)}">${esc(initials(n))}</span>`).join('')}${o.people.length > 3 ? `<span class="pl-face is-more">+${o.people.length - 3}</span>` : ''}` : '<span class="pl-noone">No one named</span>'}</span>
+            <span class="pl-own-who">${o.people.length ? `${o.people.slice(0, 3).map((n) => `<span class="pl-face" title="${esc(n)}">${esc(initials(n))}</span>`).join('')}${o.people.length > 3 ? `<span class="pl-face is-more">+${o.people.length - 3}</span>` : ''}` : '<span class="pl-face is-none" title="No one named yet"><span class="pl-sr">No one named yet</span></span>'}</span>
           </button></li>`).join('')}</ul>
       </div>`;
 
@@ -395,7 +395,8 @@ export function mount(el, ctx) {
     const title = 'Quality';
     const about = `Fabric: rolls that passed inspection out of all rolls inspected, from the inspection records. Garments: pieces passed out of pieces checked, across all in-line and final checks. The red part of each ring is what failed.`;
     const insp = data.all('inspections'), checks = rows('qc_checks');
-    if (!insp.length && !checks.length) return block(4, title, about, quiet('Appears when fabric rolls are inspected'));
+    const checked = total(checks, (c) => c.checked), passed = total(checks, (c) => c.passed);
+    if (!insp.length && !(checked > 0)) return block(4, title, about, quiet('Appears when fabric rolls are inspected'));
     const dial = (label, good, all, unit, failWord) => {
       const p = share(good, all), bad = all - good;
       return `<div class="pl-dial">
@@ -403,7 +404,6 @@ export function mount(el, ctx) {
         <div class="pl-dial-say"><p class="eyebrow">${esc(label)}</p><p class="pl-dial-of">${esc(`${num(good)} of ${num(all)} ${unit} passed`)}</p>${bad > 0 ? `<span class="tag tag-crit">${esc(`${num(bad)} ${failWord}`)}</span>` : '<span class="tag tag-ok">None failed</span>'}</div>
       </div>`;
     };
-    const checked = total(checks, (c) => c.checked), passed = total(checks, (c) => c.passed);
     return block(4, title, about, `<div class="pl-dials">
       ${insp.length ? dial('Fabric inspection', insp.filter((i) => i.result === 'pass').length, insp.length, insp.length === 1 ? 'roll' : 'rolls', 'failed') : ''}
       ${checked > 0 ? dial('Garment checks', Math.min(passed, checked), checked, 'pieces', 'not passed') : ''}</div>`);
@@ -459,7 +459,8 @@ export function mount(el, ctx) {
     const T = iso(today());
     const g = goliveModel(T), wo = ordersModel(T);
     say(T, g, wo);
-    const business = [fabricHtml(), qualityHtml(), productionHtml(wo), salesHtml(T), moneyHtml(T), alertsHtml()].join('');
+    const col = (span, ...blocks) => (blocks.join('') ? `<div class="pl-col pl-c${span}">${blocks.join('')}</div>` : '');
+    const business = [fabricHtml(), qualityHtml(), col(7, productionHtml(wo), alertsHtml()), col(5, salesHtml(T), moneyHtml(T))].join('');
     body.innerHTML = `
       ${goliveHtml(g)}
       ${business ? `<section class="pl-sec" aria-label="The business, live">${head('The business, live', 'Each picture below is drawn from the records as they stand this minute and redraws when any of them changes. A block shows only when your role can read the records behind it.', '', 'h2')}<div class="pl-grid">${business}</div></section>` : ''}
