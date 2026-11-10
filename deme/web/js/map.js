@@ -329,7 +329,7 @@ export function mount(el, ctx) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(30, 1, 1, 900);
+  const camera = new THREE.PerspectiveCamera(30, 1, 1, 1400);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.7);
   const sun = new THREE.DirectionalLight(0xffffff, 2.3);
@@ -639,7 +639,7 @@ export function mount(el, ctx) {
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch && ptrs.size === 2) {
       const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-      cam.radius = clamp(cam.radius * (pinch.d / d), 45, 360); pan(cx - pinch.cx, cy - pinch.cy);
+      cam.radius = clamp(cam.radius * (pinch.d / d), 45, Math.max(360, HOME.radius * 1.15)); pan(cx - pinch.cx, cy - pinch.cy);
       pinch = { d, cx, cy }; moved = 99;
     } else if (drag) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y; moved += Math.abs(dx) + Math.abs(dy);
@@ -662,7 +662,7 @@ export function mount(el, ctx) {
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('pointerleave', () => { hoverAt = null; setHover(null); });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  canvas.addEventListener('wheel', (e) => { e.preventDefault(); fly = null; cam.radius = clamp(cam.radius * Math.exp(e.deltaY * 0.0011), 45, 300); }, { passive: false });
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); fly = null; cam.radius = clamp(cam.radius * Math.exp(e.deltaY * 0.0011), 45, Math.max(300, HOME.radius * 1.15)); }, { passive: false });
 
   function setHover(p) {
     const id = p?.type === 'node' ? p.id : null;
@@ -870,6 +870,7 @@ export function mount(el, ctx) {
       if (fly.t >= 1) fly = null;
     }
     placeCamera();
+    scene.fog.near = cam.radius + 60; scene.fog.far = cam.radius + 320; // the haze starts behind the model at any zoom
 
     // travelling dots
     const idx = { material: 0, goods: 0, money: 0, data: 0 };

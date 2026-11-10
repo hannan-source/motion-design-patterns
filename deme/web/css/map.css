@@ -51,6 +51,7 @@
 }
 .map .sheet-grip { display: none; }
 .map .insp-body { flex: 1; overflow-y: auto; padding: 20px 20px 24px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; }
+.map .insp-body > * { flex-shrink: 0; }
 .map .insp-body h2 { font-size: 26px; font-weight: 300; letter-spacing: -.03em; line-height: 1.12; min-width: 0; overflow-wrap: anywhere; }
 .map .insp-body h3 { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .map .insp-body section { padding-top: 14px; border-top: 1px solid var(--line); }
@@ -130,7 +131,9 @@
   .map .sheet-grip { display: grid; place-items: center; height: 22px; border: 0; background: none; flex: none; width: 100%; }
   .map .sheet-grip i { width: 38px; height: 4px; border-radius: 2px; background: var(--line-2); }
   .map .insp-body { padding: 4px var(--gutter-r) 20px var(--gutter-l); }
-  .map .insp-body h2 { font-size: 22px; }
-  .map .map-tour { left: var(--gutter-l); right: var(--gutter-r); width: auto; transform: none; bottom: auto; top: 54px; }
+  .map .insp-body > * { flex-shrink: 0; }
+.map .insp-body h2 { font-size: 22px; }
+  .map.is-touring .map-top { display: none; }
+  .map .map-tour { left: var(--gutter-l); right: var(--gutter-r); width: auto; transform: none; bottom: auto; top: 10px; }
   .map .map-tour p { font-size: 14.5px; }
 }
