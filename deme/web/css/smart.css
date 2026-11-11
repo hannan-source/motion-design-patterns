@@ -1,0 +1,44 @@
+/* Bring in data: three numbered steps, each a panel. */
+.smart .si-step { animation: rise .5s var(--ease-out) both; }
+.smart .si-n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: #fff; font: 400 12px var(--font-mono); flex: none; }
+.smart .panel-head h2 { font-size: 18px; }
+.smart .si-pick { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 18px 22px; align-items: start; }
+.smart .si-pick > .field:nth-of-type(2), .smart .si-pick > .row { grid-column: 2; }
+.smart .si-drop { grid-row: span 3; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 220px; padding: 20px; border: 1.5px dashed var(--line-2); border-radius: var(--r-lg); text-align: center; cursor: pointer; transition: background .25s, border-color .25s; isolation: isolate; overflow: hidden; }
+.smart .si-drop::before { content: ""; position: absolute; inset: 0; background: var(--g); opacity: 0; filter: blur(30px); transition: opacity .35s; z-index: -1; }
+.smart .si-drop:hover::before, .smart .si-drop.is-over::before, .smart .si-drop:focus-within::before { opacity: .22; }
+.smart .si-drop.is-over { border-color: var(--ink); }
+.smart .si-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.smart .si-into { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 22px; align-items: end; }
+.smart .si-meter { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; align-items: center; padding-bottom: 10px; }
+.smart .si-note { padding: 10px 14px; border-radius: var(--r-md); background: var(--info-soft); }
+.smart .si-missing { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.smart .si-map { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.smart .si-col { display: grid; grid-template-columns: minmax(0, 1.2fr) 28px minmax(0, 1fr) minmax(0, .8fr); gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); position: relative; }
+.smart .si-col:last-child { border-bottom: 0; }
+.smart .si-col::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--ok); }
+.smart .si-col.is-out { background: var(--surface-2); }
+.smart .si-col.is-out::before { background: var(--line-2); }
+.smart .si-from { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.smart .si-from strong { font-weight: 500; overflow-wrap: anywhere; }
+.smart .si-from span { font: 400 12px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.smart .si-arrow { color: var(--ink-3); text-align: center; }
+.smart .si-result { display: grid; grid-template-columns: auto minmax(120px, 1fr) auto; gap: 22px; align-items: center; }
+.smart .si-result > div:not(.si-split) { display: flex; flex-direction: column; }
+.smart .si-big { font: 300 54px/1 var(--font-display); letter-spacing: -.03em; }
+.smart .si-split { display: flex; gap: 3px; height: 14px; }
+.smart .si-split i { border-radius: 4px; min-width: 4px; }
+.smart .si-split .ok { background: var(--ok); } .smart .si-split .bad { background: var(--crit); }
+.smart .si-errors { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-md); }
+.smart .si-errors li { display: grid; grid-template-columns: 84px 1fr; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.smart .si-errors li:last-child { border-bottom: 0; }
+.smart .si-errors .mono { color: var(--crit); }
+@media (max-width: 760px) {
+  .smart .si-pick, .smart .si-into { grid-template-columns: minmax(0, 1fr); }
+  .smart .si-pick > .field:nth-of-type(2), .smart .si-pick > .row { grid-column: 1; }
+  .smart .si-drop { grid-row: auto; min-height: 130px; }
+  .smart .si-col { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .smart .si-arrow { display: none; }
+  .smart .si-result { grid-template-columns: 1fr 1fr; }
+  .smart .si-split { grid-column: 1 / -1; order: 3; }
+}

@@ -1,4 +1,4 @@
-# Deme ERP
+# Deme Intelligence
 
 An ERP for Deme: a 3D map of the business, a production planner, and working modules for
 purchasing, inventory, quality, production, B2B and B2C sales, logistics, finance, people,
@@ -7,37 +7,29 @@ it starts empty and is filled by the team.
 
 ## Run it
 
-Needs Node 22.13 or newer. There are no packages to install.
+Needs Node 22.13 or newer.
 
 ```bash
 cd deme
+npm install
 npm start            # http://localhost:8800
 ```
 
 The first visit asks you to create the founder account. Add everyone else under **Admin > Team**.
-The database is one SQLite file at `data/deme.db` (change with `DEME_DB`). Back that file up.
+Run this way, the database is one SQLite file at `data/deme.db` (change with `DEME_DB`).
 
 ```bash
-npm test             # service rules, business actions, scheduler, HTTP and role checks
+npm test             # service rules, business actions, scheduler, API, Postgres store, sign-in
 npm run dev          # restart on file changes
+npm run build        # the static site Netlify publishes (dist/)
 ```
 
-## Deploy it
+## Put it live
 
-One container, one volume:
-
-```bash
-docker build -t deme-erp .
-docker run -d --name deme-erp -p 8800:8800 -v deme-data:/data deme-erp
-```
-
-Put it behind HTTPS (a reverse proxy such as Caddy or nginx, or the platform's own TLS). The
-sign-in cookie is marked `Secure` when the proxy sends `X-Forwarded-Proto: https`, or set
-`DEME_SECURE_COOKIES=1`. Any host that runs a Docker image with a persistent disk works
-(Render, Railway, Fly.io, a VM). Settings are in `.env.example`.
-
-Before going live: use HTTPS, schedule a backup of the database file, and keep the server to one
-instance (SQLite is a single-writer database; see `docs/ARCHITECTURE.md` for when to move to Postgres).
+Netlify, with Postgres behind it: `docs/GO-LIVE.md` lists the five things needed, the first-run
+steps, and how a change travels from a branch to the live site (tests on every pull request, a
+preview link, publish on merge). The same code also runs as one Docker container with a disk
+(`Dockerfile`) for a laptop demo or Deme's own network. Settings are in `.env.example`.
 
 ## What is in it
 
@@ -51,10 +43,18 @@ instance (SQLite is a single-writer database; see `docs/ARCHITECTURE.md` for whe
 | **Dispatch gate** | One scan point for parcels out, returns in and store fit visits |
 | **Projects** | Kanban board and Gantt timeline over the same tasks. "Create the go-live plan" adds 53 dated tasks across 8 tracks with an owner for each |
 | **My day** | Check in and out, leave, own KRAs and tasks, for every person |
+| **Guide** | Pick a role and be walked through its day on the real screens, starting with bringing existing data in |
+| **Bring in data** | Drop any spreadsheet or paste rows. Columns are matched to the right record type (by Claude Haiku when a key is set, by name otherwise), checked, and imported with a row-by-row result |
 | **ERP modules** | Masters, Purchasing, Inventory, Quality, Production, B2B sales, B2C sales, Logistics, Finance, People, Projects, Marketing, Design, Admin |
 
-Every list can be filled by hand or by CSV import (**Import** on any list gives the column
-headings). Explanations sit behind the small **i** buttons, not on the screens.
+Every list can be filled by hand, from **Bring in data**, or by CSV import on the list itself
+(**Import** gives the column headings). Explanations sit behind the small **i** buttons, not on the screens.
+
+### Sign-in
+
+Email and password, or **Sign in with Google** when the Google Workspace settings are present.
+Google accounts on the team list get their role; others in the Workspace domain come in as Staff
+until an admin gives them one.
 
 ### Roles
 
@@ -80,11 +80,12 @@ export as Tally import XML. Every change is in the audit trail.
 - Camera reading of fabric defects and barcodes. Handheld scanners work today, and tags print from the app; `docs/VISION-PLAN.md` is the plan for cameras.
 - GST and statutory payroll deductions. Settle the tax treatment with Deme's accountant first.
 - Password reset by email (an admin sets a new password under Admin > Team).
+- The lakehouse for history across ERP, HR and Tally. `docs/LAKEHOUSE.md` is the plan; the event feed it reads from is in place.
 
 ## Code
 
-See `docs/DEVELOPING.md` for the layout and the rules every screen follows, and
-`docs/ARCHITECTURE.md` for how the pieces fit. Adding a field or a record type is an edit to
+See `docs/DEVELOPING.md` for the layout and the rules every screen follows,
+`docs/ARCHITECTURE.md` for how the pieces fit, and `docs/GO-LIVE.md` for hosting and releases. Adding a field or a record type is an edit to
 `shared/schema.js`; a new business step is a function in `shared/actions.js`.
 
 The interface follows the HLL design language, re-implemented in plain CSS and WebGL because the

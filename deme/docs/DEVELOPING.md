@@ -1,11 +1,12 @@
-# Developing Deme ERP
+# Developing Deme Intelligence
 
 How the code is laid out and the rules every screen follows.
 
 ## Layout
 
 ```
-server/     index.js (HTTP, sign-in, API, static files), db.js (SQLite storage)
+server/     app.js (the API), index.js (Node host, static files), db.js (SQLite), pgstore.js (Postgres)
+netlify/    functions/api.mjs (the same API as a Netlify Function)
 shared/     runs in Node and in the browser
   schema.js   every record type, its fields, statuses and actions; roles and permissions
   service.js  permissions, validation, numbering, audit trail, action dispatch
@@ -17,10 +18,11 @@ web/        the browser app, no build step
   js/main.js  sign-in, shell, routing        js/api.js   data layer (server or in-browser preview)
   js/ui.js    shared interface pieces        js/fx.js    gradient field shader
   js/erp.js   generic lists, forms, imports  js/home.js, myday.js, scan.js, gate.js, map.js, room.js  purpose-built screens
+  js/smart.js bring in data (AI or name matching)   js/guide.js, guides-content.js  role walkthroughs
 test/       node --test
 ```
 
-Run it: `npm start` (Node 22.13 or newer, no packages to install), open `http://localhost:8800`.
+Run it: `npm install`, then `npm start` (Node 22.13 or newer), open `http://localhost:8800`.
 For a throwaway database while developing: `PORT=8801 DEME_DB=/tmp/deme-dev.db npm start`.
 Tests: `npm test`.
 
@@ -31,7 +33,8 @@ The browser loads shared code at `/shared/...`, so files in `web/js` import it a
 
 A view module exports `mount(el, ctx)` and returns a cleanup function (or nothing).
 
-- `ctx.go(name, opts)` switches route: `home`, `map`, `room`, `myday`, `scan`, `gate`, `m-<module>`.
+- `ctx.go(name, opts)` switches route: `pulse`, `home`, `map`, `room`, `myday`, `scan`, `gate`,
+  `guide`, `import`, `m-<module>`.
 - `ctx.openEntity(entityId, opts)` opens a record type in the ERP; `opts` may be `{ id }` to open one
   record or `{ add: true }` to open the add form. `ctx.opts` holds what the previous view passed.
 - Workspace screens render `<div class="workspace"><div class="workspace-inner">…`.

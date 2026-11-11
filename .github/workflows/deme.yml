@@ -1,0 +1,25 @@
+# Runs the Deme Intelligence tests on every push and pull request that touches deme/.
+# Netlify deploys the site itself (production from the main branch, a preview for each pull
+# request); make this check required on the main branch so nothing untested goes live.
+name: Deme Intelligence
+on:
+  push:
+    paths: ['deme/**', '.github/workflows/deme.yml']
+  pull_request:
+    paths: ['deme/**', '.github/workflows/deme.yml']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deme
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: deme/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build

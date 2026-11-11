@@ -8,13 +8,13 @@ import { MODULES, ROLES, ENTITIES, entityById } from '../shared/schema.js';
 
 // Each area of the app wears one of the shared gradients.
 export const VARIANT = {
-  home: 'services', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
+  home: 'services', guide: 'hll-ai', import: 'engagement', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
   masters: 'about', purchasing: 'engagement', inventory: 'industries', quality: 'hll-trust', production: 'services', b2b: 'contact', b2c: 'hll-application',
   logistics: 'hll-ai', finance: 'hll-foundation', hr: 'hll-people', projects: 'hll-ontology', marketing: 'engagement', design: 'about', admin: 'contact',
 };
 const VIEWS = {
   home: () => import('./home.js'), map: () => import('./map.js'), room: () => import('./room.js'),
-  myday: () => import('./myday.js'), pulse: () => import('./pulse.js'), tracker: () => import('./tracker.js'), scan: () => import('./scan.js'), gate: () => import('./gate.js'), erp: () => import('./erp.js'),
+  myday: () => import('./myday.js'), guide: () => import('./guide.js'), import: () => import('./smart.js'), pulse: () => import('./pulse.js'), tracker: () => import('./tracker.js'), scan: () => import('./scan.js'), gate: () => import('./gate.js'), erp: () => import('./erp.js'),
 };
 const slug = (id) => id.replace(/_/g, '-');
 const unslug = (s) => s.replace(/-/g, '_');
@@ -33,8 +33,10 @@ function menu() {
   if (c('production', 'scan')) floor.push(['scan', 'Scan station']);
   if (c('logistics', 'write') || c('b2c', 'write') || c('production', 'write')) floor.push(['gate', 'Dispatch gate']);
   floor.push(['myday', 'My day']);
+  const start = [['guide', 'Guide']];
+  if (data.writable.size) start.push(['import', 'Bring in data']);
   for (const m of Object.keys(MODULES)) if (c(m, 'read')) mods.push([`m-${m}`, MODULES[m].name, m]);
-  return { top, floor, mods };
+  return { top, floor, mods, start };
 }
 const firstRoute = () => { const m = menu(); return (m.top[0] || m.floor[0])[0]; };
 
@@ -92,7 +94,7 @@ async function route() {
   if (!data.ready) return;
   let r = parse();
   const m = menu();
-  const allowed = new Set([...m.top, ...m.floor, ...m.mods].map((x) => x[0]));
+  const allowed = new Set([...m.top, ...m.floor, ...m.mods, ...m.start].map((x) => x[0]));
   if (!r || !(allowed.has(r.name) || (r.module && allowed.has(`m-${r.module}`)))) { location.replace(`#${firstRoute()}`); return; }
   const opts = pending; pending = {};
   const turn = ++routeTurn; // a newer navigation cancels this one
@@ -106,6 +108,7 @@ async function route() {
     const mod = await VIEWS[r.view]();
     if (turn !== routeTurn) return;
     cleanup = mod.mount(view, { ...ctx, opts, route: r }) || null;
+    window.dispatchEvent(new CustomEvent('deme:routed', { detail: { name: r.name } }));   // the guide re-anchors on this
     if (opts.code) { const box = view.querySelector('#gtBarcode, #scBundle'); if (box) { box.value = opts.code; box.dispatchEvent(new Event('input', { bubbles: true })); box.focus(); } }
   } catch (e) {
     console.error(e);
@@ -126,6 +129,7 @@ function shell() {
           ${m.top.length ? `<div class="rail-group">${m.top.map(link).join('')}</div>` : ''}
           <div class="rail-group"><p class="eyebrow">On the floor</p>${m.floor.map(link).join('')}</div>
           ${m.mods.length ? `<div class="rail-group"><p class="eyebrow">ERP</p>${m.mods.map(link).join('')}</div>` : ''}
+          <div class="rail-group"><p class="eyebrow">Getting going</p>${m.start.map(link).join('')}</div>
         </div>
         <div class="rail-foot"><div class="who"><strong>${esc(data.user.name)}</strong><span>${esc(ROLES[data.user.role].name)}</span></div><button class="btn btn-sm btn-quiet" type="button" id="signOut">Sign out</button></div>
       </nav>
@@ -149,14 +153,14 @@ function auth(setup) {
   app.innerHTML = `
     <div class="auth">
       <form class="auth-form" novalidate>
-        <div><p class="sect">Deme ERP</p></div>
+        <div><p class="sect">Deme Intelligence</p></div>
         <h1 class="reveal">${setup ? 'Set up Deme' : 'Sign in'}</h1>
         ${setup ? `<p class="muted">Nothing has been set up yet. The first account becomes the founder, with access to everything. ${info('The founder account can add every other team member under Admin, choose their role and reset passwords. Roles decide which modules a person can open and whether they can add, approve or only look.', 'First account')}</p>` : ''}
         ${setup ? '<div class="field"><label for="aName">Your name</label><input class="input" id="aName" autocomplete="name" required></div>' : ''}
         <div class="field"><label for="aEmail">Work email</label><input class="input" id="aEmail" type="email" autocomplete="username" required></div>
         <div class="field"><label for="aPass">Password</label><input class="input" id="aPass" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" required minlength="8">${setup ? '<span class="hint">At least 8 characters.</span>' : ''}</div>
         <p class="error" role="alert" hidden></p>
-        <div><button class="btn btn-primary" type="submit">${setup ? 'Create the founder account' : 'Sign in'}</button></div>
+        <div class="row"><button class="btn btn-primary" type="submit">${setup ? 'Create the founder account' : 'Sign in'}</button>${api.caps.google ? `<a class="btn btn-outline" href="/api/auth/google/start">${setup ? 'Set up with Google' : 'Sign in with Google'}</a>${info('Use your Deme Google Workspace account. People already on the team list sign in as themselves. Anyone else in the Workspace is let in with self-service access only (attendance, leave, their own tasks) until an admin gives them a role.', 'Google sign-in')}` : ''}</div>
         ${api.mode === 'local' ? `<p class="faint" style="font-size:12px">Preview without a server: accounts and data are kept in this browser only. ${info('Open this app from the Deme server to share data across the team. In this preview, anyone using this browser profile can read what is stored.', 'Preview mode')}</p>` : ''}
       </form>
       <div class="auth-field"><canvas aria-hidden="true"></canvas><div class="wordmark" aria-hidden="true">Deme</div></div>
@@ -174,6 +178,8 @@ function auth(setup) {
       } catch (ex) { err.textContent = ex.message; err.hidden = false; }
     });
   });
+  const why = { expired: 'That sign-in took too long. Try again.', google: 'Google did not confirm your account. Try again.', domain: 'Use your Deme Google Workspace account.', notlisted: 'Your Google account is not on the team list. Ask an admin to add you.' }[new URLSearchParams(location.search).get('signin')];
+  if (why) { err.textContent = why; err.hidden = false; history.replaceState(null, '', location.pathname + location.hash); }
   (setup ? $('#aName') : $('#aEmail')).focus();
 }
 
@@ -188,7 +194,10 @@ async function start() {
   try {
     const s = await api.state();
     if (s.user) await enter(); else auth(s.setupNeeded);
-  } catch (e) { app.innerHTML = `<div class="boot">Deme could not start: ${esc(e.message)}</div>`; }
+  } catch (e) {
+    app.innerHTML = `<div class="boot boot-fail"><span>Deme Intelligence could not start</span><small>${esc(e.message)}</small><button class="btn btn-outline btn-sm" id="bootRetry">Try again</button></div>`;
+    document.getElementById('bootRetry').onclick = () => { app.innerHTML = '<div class="boot">Deme</div>'; start(); };
+  }
 }
 
 wireInfo();

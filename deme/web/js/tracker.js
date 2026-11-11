@@ -134,7 +134,7 @@ export function mount(el, ctx) {
     host.innerHTML = `
       <section class="panel tk-plan" aria-labelledby="tkPlanH">
         <div class="tk-plan-main">
-          <p class="eyebrow">Go live with Deme ERP</p>
+          <p class="eyebrow">Go live with Deme Intelligence</p>
           <div class="title-row"><h2 id="tkPlanH">Create the go-live plan</h2>${info('This creates a project with every step each team takes to bring the ERP into daily use, in eight tracks. The dates and the owners are a proposal: after it is created you can move any task, change its length, give it to a person or delete it.', 'Go-live plan')}</div>
           <div id="tkPlanFigs">${prev.figs}</div>
           <div class="tk-plan-form">

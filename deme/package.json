@@ -1,13 +1,21 @@
 {
-  "name": "deme-erp",
-  "version": "0.2.0",
+  "name": "deme-intelligence",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Deme ERP: business map, production planning and a full ERP, with its own server.",
+  "description": "Deme Intelligence: business map, production planning and a full ERP.",
   "engines": { "node": ">=22.13" },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server/index.js",
     "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "build": "node tools/build-netlify.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16"
   }
 }

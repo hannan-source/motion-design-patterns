@@ -10,6 +10,18 @@ import { ENTITIES, entityById, fieldsOf, can, levelOf, LEVELS, ROLES, MODULES, S
 export class UserError extends Error { constructor(msg, status = 400) { super(msg); this.status = status; } }
 const fail = (msg, status) => { throw new UserError(msg, status); };
 
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/** A date in any of the ways it is usually typed in India: 2026-03-31, 31/03/2026, 31-03-26, 31 Mar 2026. Returns YYYY-MM-DD or null. */
+export function parseDate(v) {
+  const s = String(v).trim();
+  const ok = (y, m, d) => { const dt = new Date(Date.UTC(y, m - 1, d)); return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d ? `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` : null; };
+  const yr = (y) => (y < 100 ? 2000 + y : y);
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s); if (m) return ok(+m[1], +m[2], +m[3]);
+  m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/.exec(s); if (m) return ok(yr(+m[3]), +m[2], +m[1]);
+  m = /^(\d{1,2})[\s\-]([A-Za-z]{3})[A-Za-z]*[\s\-,]+(\d{2}|\d{4})$/.exec(s); if (m && MONTHS.includes(m[2].toLowerCase())) return ok(yr(+m[3]), MONTHS.indexOf(m[2].toLowerCase()) + 1, +m[1]);
+  return null;
+}
+
 export const newId = () => globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 16);
 export const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const UNIQUE = { items: 'code', styles: 'code', machines: 'code', shop_orders: 'orderNo', parcels: 'barcode', store_orders: 'tag', ledgers: 'name', suppliers: 'name', customers: 'name', courier_invoices: 'invoiceNo' };
@@ -43,7 +55,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
     switch (f.type) {
       case 'number': case 'money': { const n = typeof v === 'number' ? v : Number(String(v).replace(/[,₹\s]/g, '')); if (!Number.isFinite(n)) fail(`${label} must be a number.`); return n; }
       case 'bool': return v === true || /^(true|yes|y|1)$/i.test(String(v));
-      case 'date': { const s = String(v).slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) fail(`${label} must be a date like 2026-03-31.`); return s; }
+      case 'date': { const s = parseDate(v); if (!s) fail(`${label} must be a date like 2026-03-31 or 31/03/2026.`); return s; }
       case 'datetime': { const d = new Date(v); if (Number.isNaN(+d)) fail(`${label} must be a date and time.`); return d.toISOString(); }
       case 'select': { const o = f.options.find(([val, name]) => String(val).toLowerCase() === String(v).toLowerCase() || String(name).toLowerCase() === String(v).toLowerCase()); if (!o) fail(`${label} must be one of: ${f.options.map((x) => x[1]).join(', ')}.`); return o[0]; }
       case 'ref': return resolveRef(f.ref, v, label);
@@ -121,6 +133,26 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       const user = await makeUser({ name, email, password, role: 'founder' });
       db.tx(() => { db.put('users', user); for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: user.createdAt, createdBy: user.id }); db.log({ at: user.createdAt, user: user.id, userName: user.name, entity: 'users', id: user.id, action: 'setup', text: 'Deme was set up' }); });
       return publicUser(user);
+    },
+    /**
+     * Someone has proved their email with an outside sign-in (Google). Returns their user record.
+     * A person already on the team list signs in as themselves. `autoJoin` (their email is in the
+     * company's own Workspace domain) admits a new person: as founder if nobody exists yet,
+     * otherwise as self-service staff until an admin gives them a role.
+     */
+    externalUser({ email, name }, { autoJoin = false } = {}) {
+      email = String(email || '').trim().toLowerCase();
+      const found = svc.findUserByEmail(email);
+      if (found) { if (found.active === false) fail('This login has been switched off.', 403); return found; }
+      if (!autoJoin) fail('Your Google account is not on the team list. Ask an admin to add you.', 403);
+      const first = !svc.hasUsers(), at = new Date().toISOString();
+      const user = { id: newId(), name: String(name || email).trim(), email, role: first ? 'founder' : 'staff', extra: [], active: true, pass: null, createdAt: at };
+      db.tx(() => {
+        db.put('users', user);
+        if (first) for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: at, createdBy: user.id });
+        db.log({ at, user: user.id, userName: user.name, entity: 'users', id: user.id, action: first ? 'setup' : 'joined', text: first ? 'Deme was set up' : `${user.name} joined by Google sign-in as staff` });
+      });
+      return user;
     },
     listUsers(user) {
       const full = can(user, 'admin', 'admin');

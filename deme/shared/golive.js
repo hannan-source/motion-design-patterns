@@ -14,7 +14,7 @@ export const TRACKS = [
   ['kickoff', 'Kick-off'], ['lists', 'Reference lists'], ['stock', 'Stock truth'], ['inward', 'Inward flow'],
   ['floor', 'Floor'], ['dispatch', 'Dispatch and sales'], ['finance', 'Finance and people'], ['run', 'Run and review'],
 ];
-export const GOLIVE_NAME = 'Go live with Deme ERP';
+export const GOLIVE_NAME = 'Go live with Deme Intelligence';
 
 // [track, title, owner, start day, working days, needs input from, done when, screen it opens]
 const T = [

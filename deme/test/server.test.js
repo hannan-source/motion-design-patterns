@@ -81,3 +81,66 @@ test('a service key acts with its role and can be switched off', async () => {
   await call('PUT', `/api/keys/${made.json.id}`, { active: false }, founder);
   assert.equal((await withKey('GET', '/api/data/parcels')).status, 401);
 });
+
+// ── Google Workspace sign-in and AI import mapping, with the outside services stubbed ──
+const idToken = (claims) => `x.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.y`;
+const googleApp = (claims, extra = {}) => {
+  const a = createApp({ dbFile: ':memory:', env: { GOOGLE_CLIENT_ID: 'cid', GOOGLE_CLIENT_SECRET: 'secret', GOOGLE_WORKSPACE_DOMAIN: 'deme.example', ...extra.env },
+    fetchImpl: async () => ({ ok: true, json: async () => ({ id_token: idToken(claims) }) }), anthropic: extra.anthropic });
+  return a;
+};
+const listen = (a) => new Promise((ok) => a.server.listen(0, () => ok(`http://localhost:${a.server.address().port}`)));
+const signInWithGoogle = async (b) => {
+  const start = await fetch(`${b}/api/auth/google/start`, { redirect: 'manual' });
+  const to = new URL(start.headers.get('location'));
+  const state = to.searchParams.get('state');
+  const back = await fetch(`${b}/api/auth/google/callback?code=abc&state=${state}`, { redirect: 'manual', headers: { Cookie: start.headers.get('set-cookie').split(';')[0] } });
+  return { to, location: back.headers.get('location'), cookie: (back.headers.getSetCookie().find((c) => c.startsWith('deme_sid=')) || '').split(';')[0] };
+};
+
+test('Google sign-in: the Workspace domain is admitted, others are turned away', async () => {
+  const good = { iss: 'https://accounts.google.com', aud: 'cid', exp: Date.now() / 1000 + 600, email: 'Gabi@deme.example', email_verified: true, hd: 'deme.example', name: 'Gabi' };
+  const a = googleApp(good); const b = await listen(a);
+  try {
+    assert.equal((await (await fetch(`${b}/api/state`)).json()).google, true);
+    const first = await signInWithGoogle(b);
+    assert.equal(first.to.hostname, 'accounts.google.com');
+    assert.equal(first.to.searchParams.get('hd'), 'deme.example');
+    assert.equal(first.location, '/?signin=ok');
+    const me = await (await fetch(`${b}/api/state`, { headers: { Cookie: first.cookie } })).json();
+    assert.equal(me.user.role, 'founder', 'the first Workspace sign-in sets Deme up');
+    assert.equal(me.user.email, 'gabi@deme.example');
+    // A forged state is refused.
+    const forged = await fetch(`${b}/api/auth/google/callback?code=abc&state=nope`, { redirect: 'manual' });
+    assert.equal(forged.headers.get('location'), '/?signin=expired');
+  } finally { a.close(); }
+
+  const outsider = googleApp({ ...good, email: 'someone@gmail.com', hd: undefined }); const b2 = await listen(outsider);
+  try { assert.equal((await signInWithGoogle(b2)).location, '/?signin=domain'); } finally { outsider.close(); }
+  const wrongAud = googleApp({ ...good, aud: 'another-app' }); const b3 = await listen(wrongAud);
+  try { assert.equal((await signInWithGoogle(b3)).location, '/?signin=google'); } finally { wrongAud.close(); }
+});
+
+test('AI import mapping: the reply is checked against the real fields, and is off without a key', async () => {
+  let asked = null;
+  const stub = { messages: { create: async (req) => { asked = req; return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ entity: 'suppliers', note: 'Check the terms column.',
+    columns: [{ header: 'Vendor', field: 'name', dateFormat: '' }, { header: 'Type', field: 'kind', dateFormat: '' }, { header: 'Days', field: 'terms', dateFormat: '' }, { header: 'Junk', field: 'not_a_field', dateFormat: '' }, { header: 'Also name', field: 'name', dateFormat: 'DMY' }] }) }] }; } } };
+  const a = createApp({ dbFile: ':memory:', env: {}, anthropic: stub }); const b = await listen(a);
+  try {
+    const setup = await fetch(`${b}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'F', email: 'f@example.com', password: 'a-long-password' }) });
+    const cookie = setup.headers.get('set-cookie').split(';')[0];
+    const post = (body, c = cookie) => fetch(`${b}/api/ai/map`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(c ? { Cookie: c } : {}) }, body: JSON.stringify(body) });
+    assert.equal((await post({ headers: ['Vendor'] }, null)).status, 401, 'sign-in is needed');
+    const out = await (await post({ headers: ['Vendor', 'Type', 'Days', 'Junk', 'Also name'], sample: [{ Vendor: 'Kaveri Weaves', Type: 'Fabric mill', Days: '30' }] })).json();
+    assert.equal(out.entity, 'suppliers');
+    assert.deepEqual(out.columns.map((c) => c.field), ['name', 'kind', 'terms', '', ''], 'unknown and repeated fields are dropped');
+    assert.equal(asked.model, 'claude-haiku-5-5');
+    assert.match(asked.messages[0].content, /Kaveri Weaves/);
+  } finally { a.close(); }
+  const off = createApp({ dbFile: ':memory:', env: {} }); const b2 = await listen(off);
+  try {
+    const setup = await fetch(`${b2}/api/setup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'F', email: 'f@example.com', password: 'a-long-password' }) });
+    const r = await fetch(`${b2}/api/ai/map`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: setup.headers.get('set-cookie').split(';')[0] }, body: JSON.stringify({ headers: ['A'] }) });
+    assert.equal(r.status, 501);
+  } finally { off.close(); }
+});

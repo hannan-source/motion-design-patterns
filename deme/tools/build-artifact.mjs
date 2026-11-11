@@ -25,7 +25,9 @@ const cssBlock = between('<!--css-->', '<!--/css-->');
 const sheets = [...cssBlock.matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((f) => existsSync(join(web, f)));
 const css = sheets.map((f) => `/* ${f} */\n${readFileSync(join(web, f), 'utf8')}`).join('\n');
 head = head.replace(`<!--css-->${cssBlock}<!--/css-->`, `<style>\n${css}\n</style>`);
-const body = between('<!--page-body-->', '<!--/page-body-->');
+// Marked as the preview so it keeps data in the browser; unmarked copies always use their server.
+const body = between('<!--page-body-->', '<!--/page-body-->').replace('<div id="app">', '<div id="app" data-preview="1">');
+if (!body.includes('data-preview="1"')) throw new Error('Could not mark the page as a preview.');
 
 mkdirSync(out, { recursive: true });
 const page = join(out, 'deme-erp.html');

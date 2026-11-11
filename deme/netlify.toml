@@ -1,0 +1,26 @@
+# Deme Intelligence on Netlify. In the site settings, set "Base directory" to `deme`.
+# The web app is static; /api/* runs netlify/functions/api.mjs against Postgres.
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+  # Shipped as they are instead of being bundled: both are CommonJS-heavy packages.
+  external_node_modules = ["pg", "@anthropic-ai/sdk"]
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "same-origin"
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

@@ -6,6 +6,7 @@
 import { FUNCTIONS, TRACKS } from './golive.js';
 
 export const COMPANY = 'Deme';
+export const PRODUCT = 'Deme Intelligence';
 export const STAGES = ['cut', 'stitch', 'finish', 'qc', 'pack'];
 export const STAGE_NAMES = { cut: 'Cutting', stitch: 'Stitching', finish: 'Finishing', qc: 'Final QC', pack: 'Packing' };
 export const INSPECTION_PASS_MARK = 40; // 4-point system: penalty points per 100 sq yd

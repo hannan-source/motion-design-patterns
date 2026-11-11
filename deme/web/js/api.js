@@ -40,19 +40,34 @@ const guard = async (fn) => { try { return await fn(); } catch (e) { if (e insta
 
 export const api = {
   get mode() { return mode; },
-  /** Find out whether a server is there, then whether anyone is signed in. */
+  /** What this copy of the server has switched on: Google sign-in, AI mapping. */
+  caps: { google: false, ai: false },
+  /**
+   * Who is signed in, and whether the first account still has to be made. The hosted preview page
+   * is marked as such when it is built and keeps its data in this browser; every other copy talks
+   * to its server and says so when the server cannot be reached, so live data never lands in one
+   * person's browser by accident.
+   */
   async state() {
-    try {
-      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
-      const res = await fetch('/api/health', { signal: ctl.signal }); clearTimeout(t);
-      const j = await res.json(); if (!j.ok) throw new Error('not deme');
-      mode = 'server';
-      return await http('GET', 'state');
-    } catch {
+    if (document.getElementById('app')?.dataset.preview === '1') {
       mode = 'local'; startLocal();
       const u = local.userId && local.svc.getUser(local.userId);
       return { setupNeeded: !local.svc.hasUsers(), user: local.svc.publicUser(u) };
     }
+    mode = 'server';
+    let last = null;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const s = await http('GET', 'state');
+        api.caps.google = !!s.google; api.caps.ai = !!s.ai;
+        return s;
+      } catch (e) {
+        last = e;
+        if (e.status && e.status < 500) break;
+        await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+      }
+    }
+    throw new Error(last?.status ? last.message : 'The server did not answer.');
   },
   setup: (input) => (mode === 'server' ? http('POST', 'setup', input) : guard(async () => { const user = await local.svc.setup(input); setLocalUser(user.id); return { user }; })),
   login: (email, password) => (mode === 'server' ? http('POST', 'login', { email, password }) : guard(async () => {
@@ -66,7 +81,17 @@ export const api = {
   create: (entity, input) => change(mode === 'server' ? http('POST', `data/${entity}`, input) : guard(async () => local.svc.create(me(), entity, input))),
   update: (entity, id, input) => change(mode === 'server' ? http('PUT', `data/${entity}/${id}`, input) : guard(async () => local.svc.update(me(), entity, id, input))),
   remove: (entity, id) => change(mode === 'server' ? http('DELETE', `data/${entity}/${id}`) : guard(async () => local.svc.remove(me(), entity, id))),
-  importRows: (entity, rows) => change(mode === 'server' ? http('POST', `import/${entity}`, { rows }) : guard(async () => local.svc.importRows(me(), entity, rows))),
+  /** Adds rows in parts of 500 so a big file never becomes one oversized request. Row numbers in errors stay those of the file. */
+  importRows: async (entity, rows) => {
+    const SIZE = 500, errors = []; let created = 0, last = {};
+    for (let i = 0; i < rows.length || i === 0; i += SIZE) {
+      const part = rows.slice(i, i + SIZE);
+      try { last = await change(mode === 'server' ? http('POST', `import/${entity}`, { rows: part }) : guard(async () => local.svc.importRows(me(), entity, part))); }
+      catch (e) { if (!created && !errors.length) throw e; throw new Error(`Stopped after the first ${i} rows (${created} added): ${e.message}`); }
+      created += last.created; errors.push(...last.errors.map((x) => ({ ...x, row: x.row + i })));
+    }
+    return { ...last, created, errors };
+  },
   /** Run a business action. `on` is { entity, id } for a record action; leave it out for scans and self-service. */
   act: (actionId, payload = {}, on = {}) => change(mode === 'server' ? http('POST', `action/${actionId}`, { ...on, payload }) : guard(async () => local.svc.act(me(), actionId, { ...on, payload }))),
   audit: (entity, id) => (mode === 'server' ? http('GET', `audit?${new URLSearchParams(Object.entries({ entity, id }).filter(([, v]) => v))}`) : guard(async () => local.svc.audit(me(), { entity, id }))),
@@ -79,6 +104,8 @@ export const api = {
     const vs = data.all('vouchers').filter((v) => (ids.length ? ids.includes(v.id) : v.status === 'open'));
     return vouchersToTallyXML(vs.map((v) => ({ ...v, id: v.no })), 'Deme');
   },
+  /** Ask the server's AI which record type and fields a spreadsheet's columns belong to (server only). */
+  aiMap: (body) => http('POST', 'ai/map', body),
   /** Service keys for other programs (server only). */
   keys: { list: () => http('GET', 'keys'), create: (name, role) => http('POST', 'keys', { name, role }), setActive: (id, active) => http('PUT', `keys/${id}`, { active }) },
   /** Preview only: wipe everything stored in this browser. */
@@ -95,10 +122,15 @@ export const data = {
   user: null, users: [], mine: null, readable: new Set(), writable: new Set(), cache: {}, ready: false,
   /** Fetch who I am and everything I may read. */
   async load() {
-    const b = await api.boot();
-    Object.assign(data, { user: b.user, users: b.users, mine: b.mine, readable: new Set(b.readable), writable: new Set(b.writable) });
-    const lists = await Promise.all(b.readable.map((e) => api.list(e)));
-    data.cache = Object.fromEntries(b.readable.map((e, i) => [e, lists[i]]));
+    if (mode === 'server') {   // one request for everything this person may read
+      const b = await http('GET', 'all');
+      Object.assign(data, { user: b.user, users: b.users, mine: b.mine, readable: new Set(b.readable), writable: new Set(b.writable), cache: b.data });
+    } else {
+      const b = await api.boot();
+      Object.assign(data, { user: b.user, users: b.users, mine: b.mine, readable: new Set(b.readable), writable: new Set(b.writable) });
+      const lists = await Promise.all(b.readable.map((e) => api.list(e)));
+      data.cache = Object.fromEntries(b.readable.map((e, i) => [e, lists[i]]));
+    }
     data.ready = true; emit(['*']);
   },
   async refresh(touched) {
