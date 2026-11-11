@@ -41,6 +41,7 @@ export function mount(el, ctx) {
       </div>
     </div></div>`;
 
+  const root = $('.workspace', el); // listen here, not on el: el is the router's #view and outlives this screen
   const input = $('#gtBarcode', el), planEl = $('#gtPlan', el), note = $('#gtNote', el), minutes = $('#gtMinutes', el);
   const noteWrap = $('#gtNoteWrap', el), minWrap = $('#gtMinWrap', el);
   const focus = () => input.focus({ preventScroll: true });
@@ -132,9 +133,9 @@ export function mount(el, ctx) {
       preview(); focus();
     });
   });
-  el.addEventListener('click', (e) => {
+  root.addEventListener('click', (e) => {
     const fill = e.target.closest('[data-fill]'), open = e.target.closest('[data-open]');
-    if (fill) { input.value = fill.dataset.fill; preview(); focus(); el.querySelector('.workspace').scrollTo({ top: 0 }); }
+    if (fill) { input.value = fill.dataset.fill; preview(); focus(); root.scrollTo({ top: 0 }); }
     else if (open) ctx.openEntity('parcels', { id: open.dataset.open });
     else if (e.target.closest('[data-all]')) ctx.openEntity('parcels');
   });

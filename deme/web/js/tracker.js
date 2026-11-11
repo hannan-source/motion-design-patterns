@@ -764,6 +764,7 @@ export function mount(el, ctx) {
   const off = data.on(render);
   return () => {
     off(); if (drag) finish(drag); disarm(); cancelAnimationFrame(raf); clearTimeout(resizeT); clearTimeout(open?.saver);
+    open?.d.close(); // the drawer listens for Escape on document until it is closed
     document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize);
   };
 }

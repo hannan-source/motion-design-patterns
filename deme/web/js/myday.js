@@ -126,7 +126,8 @@ export function mount(el) {
     renderTasks(T);
   }
 
-  el.addEventListener('click', (e) => {
+  // Listen on this screen's own root, not on el: el is the router's #view and outlives this screen.
+  $('.workspace', el).addEventListener('click', (e) => {
     const check = e.target.closest('#mdCheckBtn'), task = e.target.closest('[data-task]');
     if (check) busy(check, async () => { const out = await api.act(check.dataset.do); toast(out.message || 'Saved.'); });
     else if (task) busy(task, async () => { const out = await api.act('task.done', {}, { entity: 'tasks', id: task.dataset.task }); toast(out.message || 'Task done.'); });

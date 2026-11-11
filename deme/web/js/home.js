@@ -31,6 +31,7 @@ export function mount(el, ctx) {
       <div class="hm-body" id="hmBody"></div>
     </div></div>`;
   const body = $('#hmBody', el);
+  const root = $('.workspace', el); // listen here, not on el: el is the router's #view and outlives this screen
 
   // ───────── KPI strip ─────────
   function kpis(T) {
@@ -210,7 +211,7 @@ export function mount(el, ctx) {
     $('.hm-details', el)?.addEventListener('toggle', (e) => { tableOpen = e.currentTarget.open; });
   }
 
-  el.addEventListener('click', (e) => {
+  root.addEventListener('click', (e) => {
     const att = e.target.closest('[data-att]'), step = e.target.closest('[data-step]');
     if (att) goes[Number(att.dataset.att)]?.();
     else if (step) { if (step.dataset.step === 'team') ctx.go('m-admin'); else ctx.openEntity(step.dataset.step, { add: true }); }

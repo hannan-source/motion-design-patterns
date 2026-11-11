@@ -38,6 +38,10 @@ A view module exports `mount(el, ctx)` and returns a cleanup function (or nothin
 - `ctx.openEntity(entityId, opts)` opens a record type in the ERP; `opts` may be `{ id }` to open one
   record or `{ add: true }` to open the add form. `ctx.opts` holds what the previous view passed.
 - Workspace screens render `<div class="workspace"><div class="workspace-inner">…`.
+- `el` is the router's `#view`. It is emptied on navigation, not replaced, so a listener added to `el`
+  itself stays for the rest of the session and fires on every later screen. Listen on the screen's own
+  root (the `.workspace` it renders) or on something inside it. Anything put on `document` or `window`,
+  and any drawer left open, must be removed or closed in cleanup.
 
 ## Data
 

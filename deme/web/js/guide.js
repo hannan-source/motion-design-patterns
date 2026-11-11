@@ -610,7 +610,8 @@ export function mount(el, ctx) {
   }
   const draw = () => { drawRoles(); drawBody(); };
 
-  el.addEventListener('click', (e) => {
+  // Listen on this screen's own root, not on el: el is the router's #view and outlives this screen.
+  $('.workspace', el).addEventListener('click', (e) => {
     const r = e.target.closest('[data-role]'), play = e.target.closest('[data-play]');
     if (r) {
       role = r.dataset.role; remember({ role });
