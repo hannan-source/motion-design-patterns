@@ -373,14 +373,14 @@ export function mount(el, ctx) {
 
   /**
    * Thin connectors from the tasks a bar waits for to that bar, between rows that are both on
-   * screen. Out of the end of the first, down its right side, into the start of the second; where
-   * the second starts before the first ends the line doubles back between the rows and turns red.
+   * screen: out of the first bar, down, and into the start of the second. Dotted and faint once
+   * the first is done; red where the second is set to start before the first ends.
    */
   function drawLinks(g) {
     const body = $('.tk-g-body', g), { dw, lw, pos } = gantt;
     const links = gantt.links.filter((l) => pos.has(l.from) && pos.has(l.to));
     if (!body || !links.length || links.length > 80) return;
-    const mid = (id) => { const row = $(`.tk-g-row[data-row="${CSS.escape(id)}"]`, body); return row ? { y: row.offsetTop + row.offsetHeight / 2, h: row.offsetHeight } : null; };
+    const mid = (id) => { const row = $(`.tk-g-row[data-row="${CSS.escape(id)}"]`, body); return row ? { y: row.offsetTop + row.offsetHeight / 2 } : null; };
     const round = (p) => {
       let d = `M${p[0][0]} ${p[0][1]}`;
       for (let i = 1; i < p.length; i++) {
@@ -394,10 +394,12 @@ export function mount(el, ctx) {
     let out = '';
     for (const l of links) {
       const a = mid(l.from), b = mid(l.to); if (!a || !b) continue;
-      const x1 = lw + (pos.get(l.from).e + 1) * dw - 2, x2 = lw + pos.get(l.to).s * dw + 1, back = x2 - x1 < 14;
-      const turn = a.y + Math.sign(b.y - a.y) * (a.h / 2);
-      const p = back ? [[x1, a.y], [x1 + 7, a.y], [x1 + 7, turn], [x2 - 9, turn], [x2 - 9, b.y], [x2, b.y]] : [[x1, a.y], [x1 + 7, a.y], [x1 + 7, b.y], [x2, b.y]];
-      out += `<g class="tk-link${l.done ? ' is-done' : back ? ' is-clash' : ''}"><path d="${round(p)}"/><path class="tk-link-tip" d="M${x2 - 4.5} ${b.y - 3.5}L${x2} ${b.y}L${x2 - 4.5} ${b.y + 3.5}"/></g>`;
+      const from = pos.get(l.from), to = pos.get(l.to);
+      const x0 = lw + from.s * dw + 2, x1 = lw + (from.e + 1) * dw - 2, x2 = lw + to.s * dw + 1;
+      const p = x2 - x1 >= 14 ? [[x1, a.y], [x1 + 7, a.y], [x1 + 7, b.y], [x2, b.y]] // room to turn after the first bar
+        : x2 - 9 >= x0 + 3 ? [[x2 - 9, a.y], [x2 - 9, b.y], [x2, b.y]]                // starts under the first bar: drop straight from it
+          : [[x0, a.y], [Math.min(x2 - 9, x0 - 8), a.y], [Math.min(x2 - 9, x0 - 8), b.y], [x2, b.y]]; // starts before it: go round its front
+      out += `<g class="tk-link${l.done ? ' is-done' : to.s <= from.e ? ' is-clash' : ''}"><path d="${round(p)}"/><path class="tk-link-tip" d="M${x2 - 4.5} ${b.y - 3.5}L${x2} ${b.y}L${x2 - 4.5} ${b.y + 3.5}"/></g>`;
     }
     body.insertAdjacentHTML('beforeend', `<svg class="tk-links" width="${lw + gantt.days * dw}" height="${body.offsetHeight}" aria-hidden="true">${out}</svg>`);
   }

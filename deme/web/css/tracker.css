@@ -1,7 +1,7 @@
 /* Projects: the task tracker (board and timeline over the same tasks).
    Everything is scoped under .tracker: the view root, and the wrapper the view puts inside the
    shared drawer. Tokens from app.css only. --tc is the colour of a task's track: it paints
-   edges, swatches and bars, never text. */
+   edges, swatches and bars, never text. --av is the steady colour of one person's round mark. */
 
 .tracker { --pad: 28px; --cw: min(300px, 82vw); }
 .tracker .tk-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--tc, var(--ink-3)); flex: none; }
@@ -15,6 +15,25 @@
 .tracker .tk-toggle { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); font: 400 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; transition: background .2s, color .2s, border-color .2s; }
 .tracker .tk-toggle:hover { color: var(--ink); border-color: var(--ink); }
 .tracker .tk-toggle[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+
+/* ───── Header: ask a work centre ───── */
+.tracker .tk-head-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tracker .tk-askbtn { min-height: 44px; padding: 0 20px; }
+.tracker .tk-askbtn svg { width: 14px; height: 14px; }
+
+/* ───── Marks shared by cards, bars and the drawer: work centre, tags, waiting, comments, lock ───── */
+.tracker .tk-marks { display: flex; flex-wrap: wrap; gap: 5px; }
+.tracker .tk-ctag { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 9px 2px 7px; border: 1px solid var(--line-2); border-radius: 999px; font: 400 10px/1.6 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+.tracker .tk-ctag svg { flex: none; }
+.tracker .tk-ctag > span { overflow: hidden; text-overflow: ellipsis; }
+.tracker .tk-tagchip { max-width: 100%; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); font-size: 11.5px; line-height: 1.5; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tracker .tk-tagchip::before { content: "#"; margin-right: 1px; color: var(--ink-3); }
+.tracker .tk-wait { display: inline-flex; align-items: center; gap: 4px; min-height: 22px; padding: 0 8px 0 6px; border-radius: 999px; background: var(--ink); color: var(--surface); font: 500 11px/1 var(--font-mono); letter-spacing: .04em; white-space: nowrap; flex: none; }
+.tracker .tk-wait b { font-weight: 500; }
+.tracker .tk-said { display: inline-flex; align-items: center; gap: 4px; font: 400 11px/1 var(--font-mono); color: var(--ink-2); flex: none; }
+.tracker .tk-lock { display: inline-grid; place-items: center; flex: none; color: var(--ink-3); }
+.tracker .tk-pchip[aria-pressed="true"] .tk-lock { color: inherit; }
+.tracker .tk-lock.is-named { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
 
 /* ───── Project switcher ───── */
 .tracker .tk-projects { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -6px; }
@@ -120,9 +139,15 @@
 .tracker .tk-card:hover { box-shadow: var(--shadow-1); transform: translateY(-1px); }
 .tracker .tk-card.is-done .tk-card-title { color: var(--ink-2); font-weight: 400; }
 .tracker .tk-card.is-lifted { display: none; }
+/* Waiting on other tasks: a hollow, dashed card that does not look ready to pick up */
+.tracker .tk-card.is-waiting { border: 1px dashed var(--line-2); border-left: 4px solid color-mix(in srgb, var(--tc, var(--ink-3)) 36%, var(--surface)); background: color-mix(in srgb, var(--surface) 45%, transparent); }
+.tracker .tk-card.is-waiting .tk-card-title { color: var(--ink-2); font-weight: 400; }
+.tracker .tk-card.is-waiting .tk-av { opacity: .6; }
+.tracker .tk-ghost.is-waiting { background: var(--surface); }
+.tracker .tk-foot-end { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
 .tracker .tk-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
 .tracker .tk-track { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font: 400 10.5px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tracker .tk-card-tools { display: inline-flex; gap: 6px; flex: none; }
+.tracker .tk-card-tools { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .tracker .tk-tool { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 32px; min-height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink-2); font: 400 10.5px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; transition: color .2s, border-color .2s, background .2s; }
 .tracker .tk-tool:hover, .tracker .tk-tool[aria-expanded="true"] { color: var(--ink); border-color: var(--ink); }
 .tracker .tk-chev { transition: transform .25s var(--ease-out); }
@@ -138,7 +163,8 @@
 .tracker .tk-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-size: 12.5px; color: var(--ink-2); }
 .tracker .tk-owner { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
 .tracker .tk-owner > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tracker .tk-av { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--surface); font: 500 9.5px/1 var(--font-mono); letter-spacing: .02em; flex: none; }
+.tracker .tk-av { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: color-mix(in srgb, var(--av, var(--ink)) 82%, var(--ink)); color: var(--surface); font: 500 9.5px/1 var(--font-mono); letter-spacing: .02em; flex: none; }
+.tracker .tk-av.is-none { background: none; border: 1.5px dashed var(--line-2); }
 .tracker .tk-due { display: inline-flex; align-items: center; gap: 6px; font: 400 11px/1.4 var(--font-mono); letter-spacing: .02em; color: var(--ink-2); white-space: nowrap; }
 .tracker .tk-due b { font-weight: 500; padding: 1px 7px; border-radius: 999px; }
 .tracker .tk-due.is-none, .tracker .tk-due.is-done { color: var(--ink-3); }
@@ -201,6 +227,10 @@
 .tracker .tk-g-owner { display: flex; align-items: center; gap: 5px; font-size: 11.5px; line-height: 1.3; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tracker .tk-g-askdot { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); color: var(--surface); flex: none; }
 .tracker .tk-g-askdot svg { width: 8px; height: 8px; }
+.tracker .tk-g-owner > span:not([class]) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tracker .tk-g-owner .tk-wait { min-height: 15px; padding: 0 5px 0 3px; gap: 2px; font-size: 9.5px; }
+.tracker .tk-g-owner .tk-wait svg, .tracker .tk-g-owner .tk-said svg { width: 10px; height: 10px; }
+.tracker .tk-g-owner .tk-said { font-size: 10px; gap: 3px; color: var(--ink-3); }
 .tracker .tk-g-lane { position: relative; flex: 0 0 calc(var(--days) * var(--dw)); transition: background .2s; }
 .tracker .tk-g-row:hover .tk-g-lane { background: color-mix(in srgb, var(--ink) 3%, transparent); }
 .tracker .tk-g-row.is-group { height: 40px; }
@@ -223,6 +253,7 @@
 .tracker .tk-bar.is-doing { background: var(--tc); box-shadow: 0 2px 8px color-mix(in srgb, var(--tc) 42%, transparent); }
 .tracker .tk-bar.is-done { background: color-mix(in srgb, var(--tc) 17%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tc) 40%, var(--surface)); }
 .tracker .tk-bar.is-blocked { background: repeating-linear-gradient(135deg, var(--crit) 0 4px, color-mix(in srgb, var(--crit) 26%, var(--surface)) 4px 8px); box-shadow: inset 4px 0 0 var(--tc); }
+.tracker .tk-bar.is-waiting:not(.is-blocked) { border: 1.5px dashed var(--tc); background: color-mix(in srgb, var(--tc) 7%, var(--surface)); box-shadow: none; }
 .tracker .tk-bar.is-late { outline: 2px solid var(--crit); outline-offset: 1px; }
 .tracker .tk-bar[data-bar]:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; border-radius: 5px; }
 .tracker .tk-bar.is-drag { z-index: 4; transition: none; box-shadow: var(--shadow-2); cursor: grabbing; }
@@ -234,6 +265,15 @@
 .tracker .tk-bar:hover .tk-bar-grip::after, .tracker .tk-bar.is-drag .tk-bar-grip::after { opacity: .9; }
 .tracker.is-sizing, .tracker.is-sizing .tk-bar { cursor: ew-resize; }
 .tracker .tk-tail { position: absolute; top: 50%; height: 4px; margin-top: -2px; left: calc(var(--s) * var(--dw)); width: calc(var(--n) * var(--dw)); background: repeating-linear-gradient(90deg, var(--crit) 0 4px, transparent 4px 7px); }
+/* What a bar waits for: a thin line from the end of that task into the start of this one */
+.tracker .tk-links { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.tracker .tk-link path { fill: none; stroke: var(--ink-2); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+.tracker .tk-link.is-done path { stroke: var(--ink-3); opacity: .75; }
+.tracker .tk-link.is-done path:first-child { stroke-dasharray: 2 3; }
+.tracker .tk-link.is-clash path { stroke: var(--crit); }
+.tracker.is-dragging .tk-links { visibility: hidden; }
+.tracker .tk-key-link { position: relative; display: inline-block; width: 22px; height: 0; border-top: 1.25px solid var(--ink-2); }
+.tracker .tk-key-link::after { content: ""; position: absolute; right: 0; top: -3.6px; width: 6px; height: 6px; border: solid var(--ink-2); border-width: 1.25px 1.25px 0 0; transform: rotate(45deg); }
 .tracker .tk-tail::after { content: ""; position: absolute; right: -4px; top: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--crit); box-shadow: 0 0 0 2px var(--surface); }
 
 .tracker .tk-tip { position: fixed; z-index: 160; max-width: min(320px, calc(100vw - 16px)); padding: 10px 12px; border-radius: var(--r-md); background: var(--ink); color: var(--surface); font-size: 12.5px; line-height: 1.4; box-shadow: var(--shadow-2); pointer-events: none; }
@@ -261,6 +301,75 @@
 .tracker .tk-d-ask .eyebrow { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
 .tracker .tk-d-ask .tk-bar-ask { position: static; box-shadow: none; }
 .tracker .tk-d-long { display: flex; flex-direction: column; gap: 6px; font-size: 14.5px; overflow-wrap: anywhere; }
+.tracker .tk-d-long p + p { white-space: pre-line; }
+
+/* What sits above the comments is redrawn as one piece; the comment box below it is left alone */
+.tracker .tk-d-top { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.tracker .tk-d-fixed { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13.5px; color: var(--ink-2); }
+.tracker .tk-d-fixed > span { flex: 1; min-width: 0; }
+.tracker .tk-d-fixed svg { flex: none; }
+.tracker .tk-d-people { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tracker .tk-person { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 3px 12px 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 13.5px; }
+.tracker .tk-person small { font: 400 10px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.tracker .tk-person b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracker .tk-d-people .tk-ctag { padding-block: 5px; font-size: 10.5px; }
+.tracker .tk-d-people .tk-tagchip { padding-block: 4px; font-size: 12.5px; }
+.tracker .tk-d-deps { display: flex; flex-direction: column; gap: 8px; }
+.tracker .tk-chips, .tracker .tk-dep-chosen { display: flex; flex-wrap: wrap; gap: 6px; }
+.tracker .tk-dep-chosen:empty { display: none; }
+.tracker .tk-depchip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 34px; padding: 4px 12px 4px 10px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: 13px; line-height: 1.3; text-align: left; transition: background .2s, border-color .2s; }
+.tracker button.tk-depchip:hover { background: var(--surface-2); border-color: var(--ink); }
+.tracker .tk-depchip-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracker .tk-depchip[data-status="done"] .tk-depchip-t { color: var(--ink-2); }
+.tracker .tk-depchip small { flex: none; font: 400 10px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.tracker .tk-x { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: -7px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink-2); font-size: 17px; line-height: 1; flex: none; transition: background .2s, color .2s; }
+.tracker .tk-x:hover { background: var(--surface-3); color: var(--ink); }
+
+/* Comments: oldest first, then the box to write in */
+.tracker .tk-talk { display: flex; flex-direction: column; gap: 14px; padding-top: 18px; border-top: 1px solid var(--line); }
+.tracker .tk-thread { display: flex; flex-direction: column; gap: 12px; }
+.tracker .tk-say { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; }
+.tracker .tk-say > .tk-av, .tracker .tk-compose > .tk-av { width: 28px; height: 28px; font-size: 10.5px; }
+.tracker .tk-say-in { min-width: 0; padding: 9px 12px 10px; border-radius: 3px 12px 12px 12px; background: var(--surface-2); }
+.tracker .tk-say.is-me .tk-say-in { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-2); }
+.tracker .tk-say-by { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-bottom: 3px; font-size: 13px; }
+.tracker .tk-say-by b { font-weight: 500; }
+.tracker .tk-say-by time { font: 400 10.5px/1.3 var(--font-mono); letter-spacing: .02em; color: var(--ink-3); }
+.tracker .tk-say-text { font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tracker .tk-at-name { padding: 1px 4px; border-radius: 4px; background: var(--info-soft); font-weight: 500; }
+.tracker .tk-say-none { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.tracker .tk-compose { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.tracker .tk-compose > .tk-av { align-self: start; margin-top: 8px; }
+.tracker .tk-compose-box { position: relative; min-width: 0; }
+.tracker .tk-compose textarea.input { display: block; min-height: 44px; max-height: 220px; resize: none; }
+.tracker .tk-compose .btn { min-height: 44px; }
+/* Lists that open from a field: names to mention, tasks to wait for */
+.tracker .tk-at, .tracker .tk-dep-list { position: absolute; z-index: 5; left: 0; right: 0; max-height: 228px; overflow-y: auto; padding: 4px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-2); overscroll-behavior: contain; }
+.tracker .tk-at { bottom: calc(100% + 6px); }
+.tracker .tk-dep-list { display: none; top: calc(100% + 4px); }
+.tracker .tk-dep-find { position: relative; }
+.tracker .tk-dep-find:focus-within .tk-dep-list { display: block; }
+.tracker .tk-at li, .tracker .tk-dep-list li { display: flex; align-items: center; gap: 9px; min-height: 40px; padding: 5px 9px; border-radius: 4px; font-size: 13.5px; cursor: pointer; }
+.tracker .tk-at li[aria-selected="true"], .tracker .tk-dep-list li[aria-selected="true"], .tracker .tk-at li:hover, .tracker .tk-dep-list li[data-dep-add]:hover { background: var(--surface-2); }
+.tracker .tk-at li > span:not(.tk-av), .tracker .tk-dep-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracker .tk-at small, .tracker .tk-dep-list small { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 10px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tracker .tk-dep-list li.tk-dep-none { color: var(--ink-3); cursor: default; }
+
+/* Ask a work centre: each work centre as a choice with the person in charge */
+.tracker .tk-pick { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tracker .tk-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 8px; }
+.tracker .tk-pick-opt { position: relative; display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 11px 12px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); cursor: pointer; transition: background .2s, border-color .2s, box-shadow .2s; }
+.tracker .tk-pick-opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.tracker .tk-pick-opt:hover { border-color: var(--ink); }
+.tracker .tk-pick-opt:has(input:checked) { border-color: var(--ink); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--ink); }
+.tracker .tk-pick-opt:has(input:checked)::after { content: ""; position: absolute; top: 12px; right: 12px; width: 9px; height: 9px; border-radius: 50%; background: var(--ink); }
+.tracker .tk-pick-opt:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tracker .tk-pick-name { padding-right: 16px; font-size: 14.5px; font-weight: 500; line-height: 1.25; }
+.tracker .tk-pick-head { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; line-height: 1.3; color: var(--ink-2); }
+.tracker .tk-pick-head .tk-av { width: 20px; height: 20px; font-size: 8px; }
+.tracker .tk-pick-head > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tracker .tk-pick-opt.is-open .tk-pick-head { color: var(--ink-3); }
+.tracker .tk-ask-due { max-width: 220px; }
 
 /* ───── Narrower stages: the board becomes a strip of columns that snaps under the thumb ───── */
 @media (max-width: 1180px) {
@@ -319,6 +428,11 @@
   .tracker .tk-d-edit { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tracker .tk-d-edit .field:first-child { grid-column: 1 / -1; }
   .tracker .tk-d-steps { width: 100%; }
+  .tracker .tk-head-acts { flex: 1 1 100%; }
+  .tracker .tk-askbtn { flex: 1 1 auto; }
+  .tracker .tk-compose { grid-template-columns: minmax(0, 1fr) auto; }
+  .tracker .tk-compose > .tk-av { display: none; }
+  .tracker .tk-ask-due { max-width: none; }
   .tracker .tk-d-steps .btn { flex: 1 1 auto; }
 }
 /* Fingers need more to hold */
@@ -328,4 +442,6 @@
   .tracker .tk-bar { height: 26px; margin-top: -13px; }
   .tracker .tk-bar-grip { right: -9px; width: 20px; }
   .tracker .tk-trk { padding-block: 11px 12px; }
+  .tracker .tk-x { width: 30px; height: 30px; }
+  .tracker .tk-depchip { min-height: 40px; }
 }
