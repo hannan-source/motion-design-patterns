@@ -51,6 +51,27 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
   const origin = (req) => (env.PUBLIC_URL ? String(env.PUBLIC_URL).replace(/\/$/, '') : `${isSecure(req) ? 'https' : 'http'}://${req.headers.host}`);
   const google = () => (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { id: env.GOOGLE_CLIENT_ID, secret: env.GOOGLE_CLIENT_SECRET, domain: String(env.GOOGLE_WORKSPACE_DOMAIN || '').toLowerCase() } : null);
   const aiReady = () => !!(anthropic || env.ANTHROPIC_API_KEY);
+  const mailReady = () => !!(env.RESEND_API_KEY && env.MAIL_FROM);
+  const escHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  /**
+   * Email the notices a request produced, after it has been saved. Uses Resend's HTTP API
+   * (RESEND_API_KEY, MAIL_FROM). Without those, notices stay in the app only. A failed email
+   * never fails the request: the notice is already in the person's inbox in the app.
+   */
+  async function sendMail(req, list) {
+    if (!mailReady() || !list?.length) return;
+    const base = origin(req);
+    await Promise.allSettled(list.slice(0, 25).map(async (m) => {
+      const url = `${base}/#${m.link || 'journey'}`;
+      const res = await fetchImpl(env.MAIL_API_URL || 'https://api.resend.com/emails', {
+        method: 'POST', signal: AbortSignal.timeout(5000),
+        headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ from: env.MAIL_FROM, to: [m.email], subject: m.text.slice(0, 160), text: `${m.text}\n\nOpen it in ${PRODUCT}: ${url}`,
+          html: `<p style="font:16px/1.5 system-ui,sans-serif;color:#1a1a1a">${escHtml(m.text)}</p><p style="font:14px system-ui,sans-serif"><a href="${escHtml(url)}" style="display:inline-block;padding:10px 16px;background:#1a1a1a;color:#fff;border-radius:6px;text-decoration:none">Open in ${PRODUCT}</a></p>` }),
+      });
+      if (!res.ok) console.error('mail not sent', res.status);
+    })).then((rs) => rs.forEach((r) => { if (r.status === 'rejected') console.error('mail not sent', r.reason?.message || r.reason); }));
+  }
   const publicKey = (k) => ({ id: k.id, name: k.name, role: k.role, hint: k.hint, active: k.active, createdAt: k.createdAt, lastUsed: k.lastUsed || null });
 
   // Who is asking: a service key in the Authorization header, or a session cookie. Only hashes are stored.
@@ -175,9 +196,10 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
         return await store.run((db) => { const { svc, u } = who(db); return json(200, { user: svc.publicUser(u), readable: svc.readable(u), writable: svc.writable(u), users: svc.listUsers(u), mine: svc.mine(u), data: Object.fromEntries(svc.readable(u).map((e) => [e, svc.list(u, e)])) }); }, { preload: [...names, 'users', 'api_keys'] });
       }
 
-      return await store.run(async (db) => {
+      const res = await store.run(async (db) => {
         const svc = createService(db, { actions: ACTIONS, hash: hashPassword });
-        if (parts[0] === 'state') return json(200, { setupNeeded: !svc.hasUsers(), user: svc.publicUser(whoIs(db, svc, req)), google: !!google(), ai: aiReady(), product: PRODUCT });
+        const out = await (async () => {
+        if (parts[0] === 'state') return json(200, { setupNeeded: !svc.hasUsers(), user: svc.publicUser(whoIs(db, svc, req)), google: !!google(), ai: aiReady(), mail: mailReady(), product: PRODUCT });
         if (parts[0] === 'setup' && m === 'POST') { const user = await svc.setup(body); return startSession(db, req, json(200, { user }), user); }
         if (parts[0] === 'login' && m === 'POST') {
           const key = `${req.ip}|${String(body.email || '').toLowerCase()}`, a = attempts.get(key);
@@ -194,6 +216,12 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
         if (!user) throw new UserError('Sign in to continue.', 401);
 
         if (parts[0] === 'boot') return json(200, { user: svc.publicUser(user), readable: svc.readable(user), writable: svc.writable(user), users: svc.listUsers(user), mine: svc.mine(user) });
+        if (parts[0] === 'me' && parts[1] === 'position' && m === 'POST') return json(200, svc.pickPosition(user, body));
+        if (parts[0] === 'inbox') {
+          if (m === 'GET') return json(200, svc.inbox(user));
+          if (m === 'POST' && parts[1] === 'read') return json(200, svc.readInbox(user, Array.isArray(body.ids) ? body.ids : null));
+        }
+        if (parts[0] === 'users' && parts[1] && parts[2] === 'join' && m === 'POST') return json(200, svc.decideJoin(user, parts[1], body.ok !== false));
         if (parts[0] === 'users') {
           if (m === 'GET') return json(200, svc.listUsers(user));
           if (m === 'POST') return json(200, await svc.createUser(user, body));
@@ -246,7 +274,13 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
           return { status: 200, cookies: [], headers: { 'content-type': 'application/xml; charset=utf-8', 'content-disposition': 'attachment; filename="deme-vouchers.xml"', 'cache-control': 'no-store' }, body: vouchersToTallyXML(vs.map((v) => ({ ...v, id: v.no })), req.query.get('company') || COMPANY) };
         }
         throw new UserError('Not found.', 404);
+        })();
+        out.mail = [...svc.outbox];   // only what the run that was saved produced
+        return out;
       });
+      const mail = res.mail; delete res.mail;
+      await sendMail(req, mail);
+      return res;
     } catch (e) {
       if (e instanceof UserError) return json(e.status, { error: e.message });
       console.error(e);

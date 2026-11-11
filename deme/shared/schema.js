@@ -3,7 +3,8 @@
 // so adding a field or an entity here is enough for it to appear everywhere.
 // Runs unchanged in Node and in the browser.
 
-import { FUNCTIONS, TRACKS } from './golive.js';
+import { TRACKS } from './golive.js';
+import { FUNCTIONS, POSITIONS } from './org.js';
 
 export const COMPANY = 'Deme';
 export const PRODUCT = 'Deme Intelligence';
@@ -16,7 +17,7 @@ export const INSPECTION_PASS_MARK = 40; // 4-point system: penalty points per 10
 export const LEVELS = ['none', 'scan', 'read', 'write', 'admin'];
 
 export const MODULES = {
-  masters: { name: 'Masters', info: 'The reference lists every other module points at: materials, styles with their stitch minutes and bill of materials, suppliers, customers, work centres and machines. Fill these first.' },
+  masters: { name: 'Masters', info: 'The reference lists every other module points at: materials, styles with their stitch minutes and bill of materials, suppliers, customers, work centres with their workstations, and machines. Fill these first.' },
   purchasing: { name: 'Purchasing', info: 'Raise purchase orders, get them approved, and book goods receipts when material arrives. Posting a receipt creates fabric rolls or adds stock, opens a supplier bill and writes the purchase voucher.' },
   inventory: { name: 'Inventory', info: 'Fabric by roll, and thread, trims, tools and consumables by quantity. Every change is a stock movement, so the count can always be traced. Minimum levels drive the low-stock alerts.' },
   quality: { name: 'Quality', info: 'Fabric inspection on the 4-point system before dyeing, dye lots out to the dyer and back with a shade check, and in-line and final checks on work orders. Only inspected rolls can be sent for dyeing.' },
@@ -26,7 +27,7 @@ export const MODULES = {
   logistics: { name: 'Logistics', info: 'Every parcel in or out passes one scan gate. Scans update the order and the stock. Courier invoices are matched line by line against the parcels actually shipped before they are approved for payment.' },
   finance: { name: 'Finance', info: 'Ledgers, vouchers, supplier bills and receivables. Most vouchers are written by events elsewhere in the ERP; manual journals can be added here. Vouchers export to Tally as import XML.' },
   hr: { name: 'People', info: 'Employee records, attendance, leave, KRAs and payroll. Everyone can check in and out, apply for leave and see their own KRAs from My day. Salaries and payroll are visible to HR admins only.' },
-  projects: { name: 'Projects', info: 'Shared projects and tasks for any team: a collection launch, a factory fix, a shoot. Tasks have an owner, a due date and a status.' },
+  projects: { name: 'Projects', info: 'Shared projects and tasks for every team. Anyone can add a task, ask another work centre for something, comment, and say what a task is waiting on. The go-live plan lives here; so does every project after it.' },
   marketing: { name: 'Marketing', info: 'Campaigns with budget, spend and revenue, and the content calendar across channels.' },
   design: { name: 'Design', info: 'Collections and the development of each style from sketch to approved sample. Sample requests go to Production from here.' },
   admin: { name: 'Admin', info: 'Team members and what each role can do, company settings, connections to outside systems, and the audit trail of who changed what.' },
@@ -35,6 +36,7 @@ export const MODULES = {
 const ALL = (lvl) => Object.fromEntries(Object.keys(MODULES).map((m) => [m, lvl]));
 // From the access plan the Deme team drew up for their ERP evaluation.
 export const ROLES = {
+  admin: { name: 'System admin', perms: ALL('admin') },
   founder: { name: 'Founder / CEO', perms: ALL('admin') },
   ops_head: { name: 'Operations head', perms: ALL('admin') },
   production_head: { name: 'Production head', perms: { production: 'admin', b2c: 'write', projects: 'write', purchasing: 'write', masters: 'write', inventory: 'read', quality: 'read', b2b: 'read', logistics: 'read', design: 'read' } },
@@ -42,6 +44,8 @@ export const ROLES = {
   line_manager: { name: 'Line manager', perms: { production: 'write', projects: 'write', purchasing: 'write', masters: 'read', inventory: 'read' } },
   operator: { name: 'Tailor / Master (scan only)', perms: { production: 'scan' } },
   qc: { name: 'QC head / assistant manager', perms: { quality: 'write', inventory: 'write', purchasing: 'write', projects: 'write', production: 'read', masters: 'read' } },
+  stores: { name: 'Stores', perms: { inventory: 'write', purchasing: 'write', quality: 'write', projects: 'write', production: 'read', logistics: 'read', masters: 'read' } },
+  dispatch: { name: 'Dispatch', perms: { logistics: 'write', b2c: 'write', projects: 'write', inventory: 'read', production: 'read', masters: 'read' } },
   logistics: { name: 'Logistics', perms: { logistics: 'write', projects: 'write', purchasing: 'write', b2c: 'read', b2b: 'read', masters: 'read' } },
   b2b: { name: 'B2B and merchandising', perms: { b2b: 'write', inventory: 'write', purchasing: 'write', projects: 'write', production: 'read', masters: 'write', design: 'read', logistics: 'read' } },
   sales: { name: 'Sales (B2C)', perms: { b2c: 'write', production: 'read', projects: 'write', purchasing: 'write', logistics: 'read', masters: 'read' } },
@@ -49,7 +53,7 @@ export const ROLES = {
   marketing: { name: 'Marketing', perms: { marketing: 'write', projects: 'write', b2c: 'read' } },
   design: { name: 'Design', perms: { design: 'write', projects: 'write', purchasing: 'write', masters: 'read', production: 'read' } },
   hr_admin: { name: 'HR admin', perms: { hr: 'admin', projects: 'write' } },
-  staff: { name: 'Staff (self-service only)', perms: {} },
+  staff: { name: 'Team member', perms: { projects: 'write' } },
 };
 
 /** Effective level a user holds on a module: role level, raised by any extra grants on the user. */
@@ -93,13 +97,17 @@ export const ENTITIES = [
     info: 'Wholesale accounts and Deme\'s own store. Online shoppers are not kept here; they stay on the Shopify order.',
     fields: [['name', 'Name', 'text', { req: true, list: true }], ['kind', 'Kind', 'select', { req: true, list: true, options: opt(['b2b', 'B2B account'], ['store', 'Own store'], ['other', 'Other']) }],
       ['country', 'Country', 'text', { list: true }], ['currency', 'Currency', 'select', { def: 'INR', list: true, options: opt('INR', 'USD', 'GBP', 'EUR', 'AED', 'AUD') }], ['contact', 'Contact person', 'text', {}], ['email', 'Email', 'text', {}], ['terms', 'Payment terms (days)', 'number', { def: 30 }], ['ledger', 'Tally ledger name', 'text', {}]] },
-  { id: 'work_centres', module: 'masters', name: 'Work centres', one: 'Work centre', title: 'name',
-    info: 'The teams work flows through. People × shift minutes × efficiency gives the standard minutes a work centre can produce in a day, which is what the production plan schedules against.',
-    fields: [['name', 'Name', 'text', { req: true, list: true }], ['stage', 'Stage', 'select', { req: true, list: true, options: STAGES.map((s) => [s, STAGE_NAMES[s]]) }],
-      ['line', 'Line', 'select', { def: 'shared', list: true, hint: 'Stitching only', options: opt(['b2b', 'B2B line'], ['d2c', 'D2C line'], ['sample', 'Sampling room'], ['shared', 'Shared']) }],
-      ['people', 'People', 'number', { req: true, list: true }], ['shiftMinutes', 'Shift minutes', 'number', { def: 480 }], ['efficiency', 'Efficiency (0 to 1)', 'number', { def: 0.7, list: true }]] },
+  { id: 'work_centres', module: 'masters', name: 'Work centres', one: 'Work centre', title: 'name', level: 'admin',
+    info: 'A part of the business with one person in charge: Production, Merchandising, Design, Finance. People belong to a work centre, tasks can be addressed to one, and its head confirms who joins it. A starting set is created at setup; rename, add or remove as Deme is actually organised.',
+    fields: [['name', 'Name', 'text', { req: true, list: true }], ['head', 'Person in charge', 'user', { list: true }], ['about', 'What it does', 'long', {}], ['key', 'Key', 'text', { ro: true }]] },
+  { id: 'workstations', module: 'masters', name: 'Workstations', one: 'Workstation', title: 'name', level: 'admin', headVia: 'centre',
+    info: 'A place inside a work centre where one kind of work is done: the cutting table, a stitching line, the inspection table, the dispatch gate. For production workstations, people × shift minutes × efficiency gives the standard minutes a day the production plan schedules against. The head of a work centre can add and change its workstations.',
+    fields: [['name', 'Name', 'text', { req: true, list: true }], ['centre', 'Work centre', 'ref', { ref: 'work_centres', req: true, list: true }], ['lead', 'Run by', 'user', { list: true }],
+      ['stage', 'Production stage', 'select', { list: true, hint: 'Only for workstations the production plan schedules', options: STAGES.map((s) => [s, STAGE_NAMES[s]]) }],
+      ['line', 'Line', 'select', { def: 'shared', hint: 'Stitching only', options: opt(['b2b', 'B2B line'], ['d2c', 'D2C line'], ['sample', 'Sampling room'], ['shared', 'Shared']) }],
+      ['people', 'People', 'number', { def: 0, list: true }], ['shiftMinutes', 'Shift minutes', 'number', { def: 480 }], ['efficiency', 'Efficiency (0 to 1)', 'number', { def: 0.7 }]] },
   { id: 'machines', module: 'masters', name: 'Machines', one: 'Machine', title: 'code',
-    fields: [['code', 'Machine code', 'text', { req: true, list: true }], ['type', 'Type', 'text', { list: true }], ['workCentre', 'Work centre', 'ref', { ref: 'work_centres', list: true }],
+    fields: [['code', 'Machine code', 'text', { req: true, list: true }], ['type', 'Type', 'text', { list: true }], ['workCentre', 'Workstation', 'ref', { ref: 'workstations', list: true }],
       ['status', 'Status', 'select', { def: 'running', list: true, options: opt(['running', 'Running'], ['down', 'Down'], ['service', 'In service']) }], ['lastService', 'Last service', 'date', {}], ['notes', 'Notes', 'long', {}]] },
 
   // ── Purchasing ──
@@ -274,17 +282,22 @@ export const ENTITIES = [
 
   // ── Projects ──
   { id: 'projects', module: 'projects', name: 'Projects', one: 'Project', title: 'name',
-    info: 'A project groups tasks toward one outcome. The go-live plan is a project created from a ready-made set of tasks.',
+    info: 'A project groups tasks toward one outcome. The go-live plan is a project created from a ready-made set of tasks. A project is open to everyone unless it is limited to its work centre; then only that work centre, the owner and admins see it and its tasks.',
     statuses: S(['active', 'Active', 'info'], ['done', 'Done', 'ok'], ['paused', 'Paused', 'warn']), initial: 'active', editWhen: ['active', 'paused', 'done'],
-    fields: [['name', 'Name', 'text', { req: true, list: true }], ['owner', 'Owner', 'user', { list: true }], ['start', 'Start', 'date', { def: 'today' }], ['due', 'Due', 'date', { list: true }], ['about', 'About', 'long', {}], ['kind', 'Kind', 'text', { ro: true }]],
+    fields: [['name', 'Name', 'text', { req: true, list: true }], ['owner', 'Owner', 'user', { list: true }], ['start', 'Start', 'date', { def: 'today' }], ['due', 'Due', 'date', { list: true }], ['centre', 'Work centre', 'ref', { ref: 'work_centres', list: true }], ['access', 'Who can see it', 'select', { def: 'everyone', options: opt(['everyone', 'Everyone'], ['centre', 'Only its work centre']) }], ['about', 'About', 'long', {}], ['kind', 'Kind', 'text', { ro: true }]],
     actions: [{ id: 'project.done', label: 'Mark done', when: ['active', 'paused'] }, { id: 'project.pause', label: 'Pause', when: ['active'] }, { id: 'project.resume', label: 'Resume', when: ['paused'] }] },
   { id: 'tasks', module: 'projects', name: 'Tasks', one: 'Task', title: 'title',
-    info: 'A task has one owner, a start and a due date, and a clear test for done. The owner can be a function, such as Stores, before a person is named. Masters do not use the system: where their input is needed it is written on the task.',
+    info: 'A task has one owner, a start and a due date, and a clear test for done. The owner can be a position, such as Stores, before a person is named. A task addressed to a work centre goes to its head. Anyone can add a task and comment; the person on it, whoever asked for it, the head of its work centre and the project owner can change it. Masters do not use the system: where their input is needed it is written on the task.',
     statuses: S(['todo', 'To do'], ['doing', 'Doing', 'info'], ['blocked', 'Blocked', 'crit'], ['done', 'Done', 'ok']), initial: 'todo', editWhen: ['todo', 'doing', 'blocked', 'done'],
     fields: [['project', 'Project', 'ref', { ref: 'projects', req: true, list: true }], ['title', 'Task', 'text', { req: true, list: true }], ['track', 'Track', 'select', { list: true, options: TRACKS }],
-      ['ownerRole', 'Owner', 'select', { list: true, options: FUNCTIONS }], ['assignee', 'Person', 'user', { list: true }], ['start', 'Start', 'date', {}], ['due', 'Due', 'date', { list: true }],
+      ['ownerRole', 'Owner', 'select', { list: true, options: FUNCTIONS }], ['assignee', 'Person', 'user', { list: true }], ['centre', 'For work centre', 'ref', { ref: 'work_centres', list: true }], ['start', 'Start', 'date', {}], ['due', 'Due', 'date', { list: true }],
+      ['dependsOn', 'Waits for', 'refs', { ref: 'tasks' }], ['tags', 'Tags', 'text', { hint: 'Separate with commas' }],
       ['needs', 'Needs input from', 'text', {}], ['doneWhen', 'Done when', 'long', {}], ['notes', 'Notes', 'long', {}], ['blockedBy', 'Blocked by', 'text', { ro: true }], ['doneOn', 'Done on', 'date', { ro: true }], ['opens', 'Screen', 'text', { ro: true }]],
     actions: [{ id: 'task.start', label: 'Start', when: ['todo', 'blocked'] }, { id: 'task.done', label: 'Done', when: ['todo', 'doing', 'blocked'] }, { id: 'task.block', label: 'Blocked', when: ['todo', 'doing'], form: [['reason', 'What is in the way', 'text', { req: true }]] }, { id: 'task.reopen', label: 'Reopen', when: ['done'] }] },
+
+  { id: 'comments', module: 'projects', name: 'Comments', one: 'Comment', title: 'text', readonly: true,
+    info: 'What people have said on a task, oldest first. Mention someone with @ and their name to tell them.',
+    fields: [['task', 'Task', 'ref', { ref: 'tasks', req: true, list: true }], ['text', 'Comment', 'long', { req: true, list: true }], ['by', 'By', 'user', { ro: true, list: true }]] },
 
   // ── Marketing ──
   { id: 'campaigns', module: 'marketing', name: 'Campaigns', one: 'Campaign', title: 'name',
@@ -309,6 +322,7 @@ export const ENTITIES = [
     actions: [{ id: 'dev.next', label: 'Move forward', when: ['sketch', 'pattern', 'sample', 'fit'] }, { id: 'dev.drop', label: 'Drop', when: ['sketch', 'pattern', 'sample', 'fit'] }] },
 ];
 
+export { FUNCTIONS, POSITIONS };
 export const entityById = Object.fromEntries(ENTITIES.map((e) => [e.id, e]));
 export const fieldsOf = (e) => e.fields.map(([k, label, type, o = {}]) => ({ k, label, type, ...o }));
 

@@ -90,7 +90,7 @@ test('dye lot: only inspected rolls go out; a roll that fails on shade is not pa
 
 test('sales order → work orders → output can never run ahead', () => {
   s.style = add('styles', { code: 'KF-01', name: 'Kaftan', smvCut: 4, smvStitch: 18, smvFinish: 5, smvQc: 2, smvPack: 2 });
-  add('work_centres', { name: 'Stitching line 1', stage: 'stitch', people: 12 });
+  add('workstations', { name: 'Stitching line 1', centre: 'Production', stage: 'stitch', people: 12 });
   const customer = add('customers', { name: 'Coast Boutique', kind: 'b2b', currency: 'USD' });
   s.so = add('sales_orders', { customer: customer.id, shipBy: '2026-12-20', lines: [{ style: s.style.id, qty: 200, price: 30 }, { style: s.style.id, qty: 100, price: 30 }] });
   assert.equal(act('so.confirm', 'sales_orders', s.so.id).doc.status, 'confirmed');

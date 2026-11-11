@@ -26,7 +26,7 @@ test('the whole API works over Postgres', async () => {
   const setup = await call('POST', '/api/setup', { name: 'Founder', email: 'founder@example.com', password: 'a-long-password' });
   assert.equal(setup.status, 200);
   const who = setup.cookie;
-  assert.equal((await call('GET', '/api/state', null, who)).json.user.role, 'founder');
+  assert.equal((await call('GET', '/api/state', null, who)).json.user.role, 'admin');
   assert.equal((await call('GET', '/api/data/items')).status, 401);
 
   // A chain of real transactions: material, supplier, receipt posted, roll inspected.

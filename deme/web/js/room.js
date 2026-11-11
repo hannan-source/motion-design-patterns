@@ -10,7 +10,7 @@ import { planGaps, currentPlan, planAssumptions, savePlanAssumptions } from './p
 import { sum, by, fmtDay, addWorkdays, workdayIndex, iso, clamp } from '../shared/util.js';
 
 const CH = { B2B: { name: 'B2B', v: '--ch-b2b' }, D2C: { name: 'Shopify', v: '--ch-d2c' }, STORE: { name: 'Bombay store', v: '--ch-store' }, SAMPLE: { name: 'Samples', v: '--ch-sample' } };
-const REPLAN_ON = ['*', 'styles', 'work_centres', 'work_orders', 'items', 'rolls', 'dye_lots', 'customers'];
+const REPLAN_ON = ['*', 'styles', 'workstations', 'work_orders', 'items', 'rolls', 'dye_lots', 'customers'];
 const ASSUME_FIELDS = [
   ['sampleFactor', 'Sample time factor', 'Times a production piece', 1, 10, 0.1],
   ['dyeDays', 'Dyeing days', 'Working days', 0, 60, 1],

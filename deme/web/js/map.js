@@ -45,7 +45,7 @@ function readRecords() {
   const metres = (list) => Math.round(sum(list, (r) => val(r.metres, 0)));
 
   const rolls = R('rolls'), items = R('items'), suppliers = R('suppliers'), lots = R('dye_lots'), pos = R('purchase_orders'), grns = R('goods_receipts'),
-    centres = R('work_centres'), wos = R('work_orders'), machines = R('machines'), parcels = R('parcels'), shop = R('shop_orders'), store = R('store_orders'), fits = R('fit_visits'),
+    centres = R('workstations'), wos = R('work_orders'), machines = R('machines'), parcels = R('parcels'), shop = R('shop_orders'), store = R('store_orders'), fits = R('fit_visits'),
     sos = R('sales_orders'), customers = R('customers'), invoices = R('invoices'), vouchers = R('vouchers'), bills = R('bills'), samples = R('sample_requests'), collections = R('collections'),
     bundles = R('bundles'), checks = R('qc_checks'), inspections = R('inspections'), moves = R('stock_moves');
 
@@ -158,7 +158,7 @@ function readRecords() {
       A.people = sum(mine, (w) => val(w.people, 0));
       A.minutes = Math.round(sum(mine, (w) => val(w.people, 0) * val(w.shiftMinutes, 480) * val(w.efficiency, 0.7)));
       if (packing) { if (mine.length) row(n.id, 'Packing', `${num(A.people)} people · ${num(A.minutes)} min a day`); }
-      else { row(n.id, 'People', num(A.people)); row(n.id, 'Standard minutes a day', num(A.minutes)); if (!mine.length) places[n.id].add = 'work_centres'; }
+      else { row(n.id, 'People', num(A.people)); row(n.id, 'Standard minutes a day', num(A.minutes)); if (!mine.length) places[n.id].add = 'workstations'; }
       has(n.id, mine.length);
       if (machines) A.down = count(machines, (m) => m.status === 'down' && mine.some((w) => w.id === m.workCentre));
     }

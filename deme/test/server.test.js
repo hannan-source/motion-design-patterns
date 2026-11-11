@@ -24,7 +24,7 @@ test('setup, sign-in and role checks', async () => {
   assert.equal((await call('POST', '/api/setup', { name: 'X', email: 'x@example.com', password: 'a-long-password' })).status, 409, 'setup runs once');
 
   const boot = await call('GET', '/api/boot', null, founder);
-  assert.equal(boot.json.user.role, 'founder');
+  assert.equal(boot.json.user.role, 'admin');
   assert.ok(boot.json.readable.includes('vouchers'));
   assert.ok((await call('GET', '/api/data/ledgers', null, founder)).json.length > 5, 'starter ledgers exist');
 
@@ -108,7 +108,7 @@ test('Google sign-in: the Workspace domain is admitted, others are turned away',
     assert.equal(first.to.searchParams.get('hd'), 'deme.example');
     assert.equal(first.location, '/?signin=ok');
     const me = await (await fetch(`${b}/api/state`, { headers: { Cookie: first.cookie } })).json();
-    assert.equal(me.user.role, 'founder', 'the first Workspace sign-in sets Deme up');
+    assert.equal(me.user.role, 'admin', 'the first Workspace sign-in sets Deme up');
     assert.equal(me.user.email, 'gabi@deme.example');
     // A forged state is refused.
     const forged = await fetch(`${b}/api/auth/google/callback?code=abc&state=nope`, { redirect: 'manual' });

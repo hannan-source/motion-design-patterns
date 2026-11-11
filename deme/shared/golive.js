@@ -4,12 +4,10 @@
 // reassign, move and reschedule. It is a proposal to adjust, not a fixed schedule.
 
 import { addWorkdays, iso } from './util.js';
+import { FUNCTIONS } from './org.js';
+import { taskNotices } from './collab.js';
 
-export const FUNCTIONS = [
-  ['founder', 'Founder'], ['ops', 'Operations head'], ['prod_manager', 'Production manager'], ['prod_b2b', 'Production head, B2B'],
-  ['merch', 'Merchandising head'], ['stores', 'Stores, inward and outward'], ['dispatch', 'E-com dispatch checker'], ['qc', 'QC head'],
-  ['logistics', 'Logistics'], ['finance', 'Finance'], ['hr', 'HR'], ['sales', 'Sales, B2C'], ['masters', 'Masters (input only)'], ['setup', 'Implementation team'],
-];
+export { FUNCTIONS };
 export const TRACKS = [
   ['kickoff', 'Kick-off'], ['lists', 'Reference lists'], ['stock', 'Stock truth'], ['inward', 'Inward flow'],
   ['floor', 'Floor'], ['dispatch', 'Dispatch and sales'], ['finance', 'Finance and people'], ['run', 'Run and review'],
@@ -19,7 +17,7 @@ export const GOLIVE_NAME = 'Go live with Deme Intelligence';
 // [track, title, owner, start day, working days, needs input from, done when, screen it opens]
 const T = [
   ['kickoff', 'Name one owner for each track and agree the go-live date', 'founder', 0, 1, 'Operations head', 'Each track below has a named owner and the date is announced.', ''],
-  ['kickoff', 'Create a login and role for every team lead', 'ops', 0, 2, '', 'Each lead has signed in once.', 'm-admin'],
+  ['kickoff', 'Name the person in charge of each work centre and invite every team lead', 'ops', 0, 2, '', 'Each work centre has a head, and each head has signed in once.', 'org'],
   ['kickoff', 'Walk each team through its own screens', 'setup', 1, 3, 'All team leads', 'Every lead has added and deleted one practice record.', ''],
   ['kickoff', 'Buy handheld barcode scanners and a label printer', 'ops', 0, 5, 'Stores, production manager', 'Two scanners at the gate, one per stitching line, and tags print cleanly.', ''],
   ['kickoff', 'Agree the fabric pass mark and who inspects', 'qc', 2, 2, 'Masters', 'The pass mark and the inspector are written down and shared with stores.', ''],
@@ -27,7 +25,7 @@ const T = [
   ['lists', 'Enter suppliers: mills, dyers, trim vendors, couriers', 'merch', 2, 3, 'Finance for payment terms', 'Every supplier paid in the last 12 months is listed with terms.', 'e-suppliers'],
   ['lists', 'Enter B2B customers and the store', 'prod_b2b', 2, 2, '', 'Every customer with an open order is listed with currency and terms.', 'e-customers'],
   ['lists', 'Enter materials with minimum levels: fabrics, thread shades, trims, tools', 'stores', 3, 5, 'Masters for needle, shear and thread minimums', 'Every material in use has a code, a unit and a minimum level.', 'e-items'],
-  ['lists', 'Enter work centres with the real headcount on each line', 'prod_manager', 3, 1, 'Masters', 'Cutting, each stitching line, sampling, finishing, QC and packing show today\'s headcount.', 'e-work-centres'],
+  ['lists', 'Enter the real headcount on each production workstation', 'prod_manager', 3, 1, 'Masters', 'Cutting, each stitching line, sampling, finishing, QC and packing show today\'s headcount.', 'e-workstations'],
   ['lists', 'List every machine with a code painted on it', 'prod_manager', 4, 3, 'Masters', 'Each machine on the floor has a code that matches its record.', 'e-machines'],
   ['lists', 'Enter the 20 best-selling styles with fabric and thread per piece', 'merch', 4, 5, 'Masters for fabric per piece', 'Each style has its fabric, shade, metres and thread per 100 pieces.', 'e-styles'],
   ['lists', 'Time three bundles of each best-seller and enter the minutes', 'prod_manager', 6, 6, 'Masters time the bundles on the line', 'Each style has minutes for all five stages from timed runs, not estimates.', 'e-styles'],
@@ -93,9 +91,15 @@ export const GOLIVE_ACTIONS = {
       const from = start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? new Date(`${start}T00:00:00`) : new Date(`${ctx.today}T00:00:00`);
       const last = Math.max(...GOLIVE_TEMPLATE.map((t) => t.startDay + t.days - 1));
       const project = ctx.put('projects', { name: GOLIVE_NAME, kind: 'golive', owner: ctx.user.id, start: iso(addWorkdays(from, 0)), due: iso(addWorkdays(from, last)), about: 'The steps each team takes to bring the ERP into daily use.' });
+      // A task goes straight to a person where exactly one holds the position; otherwise it waits for whoever takes it.
+      const holders = {}; for (const u of ctx.all('users')) if (u.active !== false && u.position) (holders[u.position] ||= []).push(u.id);
+      const given = {};
       for (const t of GOLIVE_TEMPLATE) {
-        ctx.put('tasks', { project: project.id, title: t.title, track: t.track, ownerRole: t.ownerRole, start: iso(addWorkdays(from, t.startDay)), due: iso(addWorkdays(from, t.startDay + t.days - 1)), needs: t.needs, doneWhen: t.doneWhen, opens: t.opens });
+        const who = holders[t.ownerRole]?.length === 1 ? holders[t.ownerRole][0] : undefined;
+        if (who) given[who] = (given[who] || 0) + 1;
+        ctx.put('tasks', { project: project.id, title: t.title, track: t.track, ownerRole: t.ownerRole, assignee: who, start: iso(addWorkdays(from, t.startDay)), due: iso(addWorkdays(from, t.startDay + t.days - 1)), needs: t.needs, doneWhen: t.doneWhen, opens: t.opens });
       }
+      for (const [who, n] of Object.entries(given)) ctx.notify(who, `The go-live plan is ready: ${n} task${n === 1 ? ' is' : 's are'} yours`, 'journey');
       ctx.log('projects', project.id, 'created', `Go-live plan created with ${GOLIVE_TEMPLATE.length} tasks`);
       return { message: `Go-live plan created: ${GOLIVE_TEMPLATE.length} tasks from ${iso(addWorkdays(from, 0))}.`, data: { project: project.id } };
     },
@@ -106,12 +110,13 @@ export const GOLIVE_ACTIONS = {
     run(ctx, { id, status }) {
       const doc = ctx.get('tasks', id) || ctx.fail('That task no longer exists.');
       if (!['todo', 'doing', 'blocked', 'done'].includes(status)) ctx.fail('Unknown column.');
-      if (doc.status !== status) { if (status === 'done') doc.doneOn = ctx.today; ctx.setStatus('tasks', doc, status, `Task moved to ${status}: ${doc.title}`); }
+      if (!ctx.may('tasks', doc)) ctx.fail(ctx.why('tasks'), 403);
+      if (doc.status !== status) { if (status === 'done') doc.doneOn = ctx.today; ctx.setStatus('tasks', doc, status, `Task moved to ${status}: ${doc.title}`); if (status === 'done') taskNotices.done(ctx, doc); if (status === 'blocked') taskNotices.blocked(ctx, doc, ''); }
       return { message: null };
     },
   },
   'task.start': stepTo('doing', 'started'),
-  'task.block': { run(ctx, { reason }, doc) { doc.blockedBy = reason || ''; ctx.setStatus('tasks', doc, 'blocked', `Task blocked: ${doc.title}${reason ? ` (${reason})` : ''}`); return { message: 'Marked as blocked.' }; } },
-  'task.done': { run(ctx, _p, doc) { doc.doneOn = ctx.today; ctx.setStatus('tasks', doc, 'done', `Task done: ${doc.title}`); return { message: 'Task done.' }; } },
+  'task.block': { run(ctx, { reason }, doc) { doc.blockedBy = reason || ''; ctx.setStatus('tasks', doc, 'blocked', `Task blocked: ${doc.title}${reason ? ` (${reason})` : ''}`); taskNotices.blocked(ctx, doc, reason); return { message: 'Marked as blocked.' }; } },
+  'task.done': { run(ctx, _p, doc) { doc.doneOn = ctx.today; ctx.setStatus('tasks', doc, 'done', `Task done: ${doc.title}`); taskNotices.done(ctx, doc); return { message: 'Task done.' }; } },
   'task.reopen': stepTo('todo', 'reopened'),
 };

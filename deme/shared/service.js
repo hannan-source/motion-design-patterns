@@ -6,6 +6,7 @@
 //   all(col) get(col, id) put(col, doc) del(col, id) next(counter) log(entry) logs(filter) tx(fn)
 
 import { ENTITIES, entityById, fieldsOf, can, levelOf, LEVELS, ROLES, MODULES, STARTER_LEDGERS } from './schema.js';
+import { positionById, DEFAULT_CENTRES, headOf, isHead, isMine } from './org.js';
 
 export class UserError extends Error { constructor(msg, status = 400) { super(msg); this.status = status; } }
 const fail = (msg, status) => { throw new UserError(msg, status); };
@@ -38,7 +39,66 @@ const canRead = (user, e) => modulesFor(e).some((m) => can(user, m, 'read'));
 const canWrite = (user, e) => !e.readonly && (can(user, e.module, e.level || 'write') || (e.alsoWrite || []).some((m) => can(user, m, 'write')));
 
 export function createService(db, { actions = {}, hash = null } = {}) {
-  const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, extra: u.extra || [], active: u.active !== false };
+  const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, extra: u.extra || [], active: u.active !== false, position: u.position || '', centre: u.centre || '', station: u.station || '', pending: u.pending || null };
+  /** Emails to send once this request has been saved: [{ email, name, text, link, byName }]. The host sends them. */
+  const outbox = [];
+  const centres = () => db.all('work_centres');
+  const isAdmin = (user) => can(user, 'admin', 'admin');
+
+  // ── Rules on single records, on top of the role's level on the module ──
+  // A project limited to its work centre is seen only by that work centre, its owner and admins.
+  const projectOpen = (user, p) => !p || p.access !== 'centre' || can(user, 'projects', 'admin') || p.owner === user.id || p.createdBy === user.id || (!!p.centre && (user.centre === p.centre || headOf(centres(), p.centre) === user.id));
+  const RULES = {
+    projects: {
+      read: (u, d) => projectOpen(u, d),
+      write: (u, d) => can(u, 'projects', 'admin') || d.owner === u.id || d.createdBy === u.id || isHead(centres(), u, d.centre || '-'),
+      why: 'Only the project owner, the head of its work centre or an admin can change a project.',
+    },
+    // Anyone can add a task and comment on one. Changing it is for the people on it.
+    tasks: {
+      read: (u, d) => projectOpen(u, db.get('projects', d.project)),
+      write: (u, d) => can(u, 'projects', 'admin') || d.createdBy === u.id || isMine(d, u) || (!!d.centre && headOf(centres(), d.centre) === u.id) || db.get('projects', d.project)?.owner === u.id,
+      why: 'Only the person on this task, whoever asked for it, the head of its work centre or the project owner can change it. Add a comment instead.',
+    },
+    comments: { read: (u, d) => { const t = db.get('tasks', d.task); return !t || RULES.tasks.read(u, t); } },
+  };
+  const visible = (user, e, doc) => !RULES[e.id]?.read || RULES[e.id].read(user, doc);
+  /** May this person change this record? The head of a work centre also runs its own workstations. */
+  const mayChange = (user, e, doc) => {
+    if (e.headVia && isHead(centres(), user, doc[e.headVia] || '-')) return true;
+    if (!canWrite(user, e)) return false;
+    return !RULES[e.id]?.write || RULES[e.id].write(user, doc);
+  };
+  const mayAdd = (user, e) => canWrite(user, e) || (!!e.headVia && isHead(centres(), user));
+
+  /** Tell someone, in the app and by email. Never the person who caused it. */
+  function notify(actor, to, text, link = '', touched = null) {
+    if (!to || to === actor?.id) return;
+    const u = db.get('users', to); if (!u || u.active === false) return;
+    if (outbox.some((m) => m.to === to && m.text === text)) return;
+    db.put('notifications', { id: newId(), to, text, link, at: new Date().toISOString(), by: actor?.id || null, byName: actor?.name || '', read: false });
+    outbox.push({ to, email: u.email, name: u.name, text, link, byName: actor?.name || '' });
+    touched?.add('notifications');
+  }
+  /** Give a person the open, unnamed tasks of their position when nobody else holds it. */
+  function handOver(u) {
+    if (!u.position || db.all('users').some((x) => x.id !== u.id && x.active !== false && x.position === u.position)) return 0;
+    let n = 0;
+    for (const t of db.all('tasks')) if (!t.assignee && t.ownerRole === u.position && t.status !== 'done') { t.assignee = u.id; db.put('tasks', t); n++; }
+    return n;
+  }
+  /** The starting structure: ledgers, work centres and their workstations. The first person is put in charge of Management. */
+  function seedOrg(user, at) {
+    const made = {};
+    for (const [key, name, about, stations] of DEFAULT_CENTRES) {
+      if (db.all('work_centres').some((c) => c.key === key || c.name.toLowerCase() === name.toLowerCase())) continue;
+      const c = { id: newId(), key, name, about, createdAt: at, createdBy: user.id, updatedAt: at, updatedBy: user.id }; if (key === 'management') c.head = user.id;
+      db.put('work_centres', c); made[key] = c.id;
+      for (const [sn, stage, line] of stations) db.put('workstations', { id: newId(), name: sn, centre: c.id, ...(stage ? { stage } : {}), line: line || 'shared', people: 0, shiftMinutes: 480, efficiency: 0.7, createdAt: at, createdBy: user.id, updatedAt: at, updatedBy: user.id });
+    }
+    return made;
+  }
+  const centreByKey = (key) => db.all('work_centres').find((c) => c.key === key)?.id || '';
   const need = (ok, msg = 'You do not have access to this.') => { if (!ok) fail(msg, 403); };
   const ent = (id) => entityById[id] || fail(`Unknown record type: ${id}`, 404);
 
@@ -117,6 +177,12 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       /** Open a supplier bill, due by the supplier's payment terms. */
       bill(supplierId, ref, amount) { if (!(amount > 0)) return null; const s = db.get('suppliers', supplierId); const due = new Date(); due.setDate(due.getDate() + (s?.terms ?? 30)); const local = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`; return put('bills', { supplier: supplierId, ref, amount, paid: 0, date: ctx.today, due: local }); },
       ledgerOf: (kind, id) => { const d = db.get(kind, id); return d ? (d.ledger || d.name) : ''; },
+      /** Tell a team member something, in the app and by email. `link` is a route such as 'task-<id>'. */
+      notify: (to, text, link) => notify(user, to, text, link, touched),
+      /** May the person doing this change that record? */
+      may: (entityId, doc) => mayChange(user, ent(entityId), doc),
+      why: (entityId) => RULES[entityId]?.why || 'Your role cannot change this.',
+      handOver, seedOrg, centreByKey,
     };
     return ctx;
   }
@@ -130,15 +196,22 @@ export function createService(db, { actions = {}, hash = null } = {}) {
     publicUser,
     async setup({ name, email, password }) {
       if (svc.hasUsers()) fail('Deme is already set up. Sign in instead.', 409);
-      const user = await makeUser({ name, email, password, role: 'founder' });
-      db.tx(() => { db.put('users', user); for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: user.createdAt, createdBy: user.id }); db.log({ at: user.createdAt, user: user.id, userName: user.name, entity: 'users', id: user.id, action: 'setup', text: 'Deme was set up' }); });
+      // The first account belongs to whoever sets the system up, not to the founder: the founder
+      // is added like everyone else and sees the result.
+      const user = await makeUser({ name, email, password, role: 'admin' });
+      db.tx(() => {
+        for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: user.createdAt, createdBy: user.id });
+        const made = seedOrg(user, user.createdAt);
+        Object.assign(user, { position: 'setup', centre: made.management || '' }); db.put('users', user);
+        db.log({ at: user.createdAt, user: user.id, userName: user.name, entity: 'users', id: user.id, action: 'setup', text: 'Deme was set up' });
+      });
       return publicUser(user);
     },
     /**
      * Someone has proved their email with an outside sign-in (Google). Returns their user record.
      * A person already on the team list signs in as themselves. `autoJoin` (their email is in the
-     * company's own Workspace domain) admits a new person: as founder if nobody exists yet,
-     * otherwise as self-service staff until an admin gives them a role.
+     * company's own Workspace domain) admits a new person: as the system admin if nobody exists
+     * yet, otherwise with self-service access until they pick a position and it is confirmed.
      */
     externalUser({ email, name }, { autoJoin = false } = {}) {
       email = String(email || '').trim().toLowerCase();
@@ -146,22 +219,27 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       if (found) { if (found.active === false) fail('This login has been switched off.', 403); return found; }
       if (!autoJoin) fail('Your Google account is not on the team list. Ask an admin to add you.', 403);
       const first = !svc.hasUsers(), at = new Date().toISOString();
-      const user = { id: newId(), name: String(name || email).trim(), email, role: first ? 'founder' : 'staff', extra: [], active: true, pass: null, createdAt: at };
+      const user = { id: newId(), name: String(name || email).trim(), email, role: first ? 'admin' : 'staff', extra: [], active: true, pass: null, createdAt: at };
       db.tx(() => {
+        if (first) { for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: at, createdBy: user.id }); const made = seedOrg(user, at); Object.assign(user, { position: 'setup', centre: made.management || '' }); }
         db.put('users', user);
-        if (first) for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: at, createdBy: user.id });
-        db.log({ at, user: user.id, userName: user.name, entity: 'users', id: user.id, action: first ? 'setup' : 'joined', text: first ? 'Deme was set up' : `${user.name} joined by Google sign-in as staff` });
+        db.log({ at, user: user.id, userName: user.name, entity: 'users', id: user.id, action: first ? 'setup' : 'joined', text: first ? 'Deme was set up' : `${user.name} joined by Google sign-in and has yet to pick a position` });
       });
       return user;
     },
     listUsers(user) {
-      const full = can(user, 'admin', 'admin');
-      return db.all('users').map((u) => (full ? publicUser(u) : { id: u.id, name: u.name, role: u.role, active: u.active !== false }));
+      const full = isAdmin(user), cs = centres();
+      // Everyone sees who is who and where. A request to join is shown to those who can answer it.
+      return db.all('users').map((u) => (full ? publicUser(u) : { id: u.id, name: u.name, role: u.role, active: u.active !== false, position: u.position || '', centre: u.centre || '', station: u.station || '', pending: u.pending && (u.id === user.id || (positionById[u.pending.position]?.approve === 'head' && isHead(cs, user, u.pending.centre || '-'))) ? u.pending : null }));
     },
     async createUser(user, input) {
       need(can(user, 'admin', 'admin'));
-      const u = await makeUser(input);
-      db.tx(() => { db.put('users', u); db.log({ at: u.createdAt, user: user.id, userName: user.name, entity: 'users', id: u.id, action: 'created', text: `Added ${u.name} as ${ROLES[u.role].name}` }); });
+      // Naming a position is enough: it brings the role and the work centre with it.
+      const pos = positionById[input.position];
+      const u = await makeUser({ ...input, role: input.role || pos?.role });
+      if (pos) Object.assign(u, { position: pos.id, centre: input.centre || centreByKey(pos.centre) });
+      else if (input.centre) u.centre = input.centre;
+      db.tx(() => { db.put('users', u); handOver(u); db.log({ at: u.createdAt, user: user.id, userName: user.name, entity: 'users', id: u.id, action: 'created', text: `Added ${u.name} as ${pos?.name || ROLES[u.role].name}` }); });
       return publicUser(u);
     },
     async updateUser(user, id, input) {
@@ -171,33 +249,85 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       if (input.name !== undefined) u.name = String(input.name).trim() || fail('Name is needed.');
       if (!self || can(user, 'admin', 'admin')) {
         if (input.role !== undefined) { if (!ROLES[input.role]) fail('Unknown role.'); if (self && input.role !== u.role) fail('You cannot change your own role.'); u.role = input.role; }
+        if (input.position !== undefined) {
+          const pos = positionById[input.position]; if (input.position && !pos) fail('Unknown position.');
+          if (self && (input.position || '') !== (u.position || '')) fail('You cannot change your own position.');
+          u.position = pos?.id || ''; delete u.pending;
+          if (pos && input.role === undefined) u.role = pos.role;
+          if (pos && input.centre === undefined && !u.centre) u.centre = centreByKey(pos.centre);
+        }
+        if (input.centre !== undefined) { if (input.centre && !db.get('work_centres', input.centre)) fail('Unknown work centre.'); u.centre = input.centre || ''; }
+        if (input.station !== undefined) u.station = input.station || '';
         if (input.extra !== undefined) u.extra = (input.extra || []).filter((m) => MODULES[m]);
         if (input.active !== undefined) { if (self && !input.active) fail('You cannot switch off your own login.'); u.active = !!input.active; }
         if (input.email !== undefined) { const em = String(input.email).trim().toLowerCase(); if (db.all('users').some((x) => x.id !== id && x.email === em)) fail('That email is already in use.'); u.email = em; }
       }
       if (input.password) { checkPassword(input.password); u.pass = await hash(input.password); }
-      db.tx(() => { db.put('users', u); db.log({ at: new Date().toISOString(), user: user.id, userName: user.name, entity: 'users', id, action: 'updated', text: `Updated ${u.name}` }); });
+      db.tx(() => { db.put('users', u); if (input.position) handOver(u); db.log({ at: new Date().toISOString(), user: user.id, userName: user.name, entity: 'users', id, action: 'updated', text: `Updated ${u.name}` }); });
       return publicUser(u);
+    },
+    /**
+     * A person says which position they hold. It takes effect when someone who can vouch for it
+     * confirms: the head of the work centre for floor and desk positions, an admin for positions
+     * that lead a work centre or carry wide access. Until then they keep what they had.
+     */
+    pickPosition(user, { position, station } = {}) {
+      const pos = positionById[position] || fail('Choose a position.');
+      const u = db.get('users', user.id) || fail('Sign in to continue.', 401);
+      const centre = centreByKey(pos.centre);
+      if (station && db.get('workstations', station)?.centre !== centre) fail('That workstation is in another work centre.');
+      const at = new Date().toISOString();
+      db.tx(() => {
+        if (isAdmin(u)) { Object.assign(u, { position: pos.id, centre: centre || u.centre || '', station: station || '' }); delete u.pending; db.put('users', u); handOver(u); return; }
+        u.pending = { position: pos.id, centre, station: station || '', at }; db.put('users', u);
+        const head = pos.approve === 'head' ? headOf(centres(), centre) : null;
+        const ask = head ? [head] : db.all('users').filter((x) => x.active !== false && isAdmin(x)).map((x) => x.id);
+        for (const to of ask) notify(u, to, `${u.name} asks to join as ${pos.name}`, 'journey');
+        db.log({ at, user: u.id, userName: u.name, entity: 'users', id: u.id, action: 'asked', text: `${u.name} asked to join as ${pos.name}` });
+      });
+      return publicUser(u);
+    },
+    /** Confirm or turn down a request to join. */
+    decideJoin(user, id, ok) {
+      const u = db.get('users', id) || fail('No such team member.', 404);
+      const p = u.pending || fail('There is no request waiting for this person.');
+      const pos = positionById[p.position] || fail('That position no longer exists.');
+      need(isAdmin(user) || (pos.approve === 'head' && isHead(centres(), user, p.centre || '-')), 'Only an admin or the head of that work centre can confirm this.');
+      const at = new Date().toISOString();
+      db.tx(() => {
+        delete u.pending;
+        if (ok) { Object.assign(u, { position: pos.id, role: pos.role, centre: p.centre || '', station: p.station || '' }); db.put('users', u); const n = handOver(u); notify(user, u.id, `You are in as ${pos.name}${n ? `: ${n} task${n === 1 ? ' is' : 's are'} waiting for you` : ''}`, 'journey'); }
+        else { db.put('users', u); notify(user, u.id, `Your request to join as ${pos.name} was not confirmed. Pick again or ask ${user.name}.`, 'journey'); }
+        db.log({ at, user: user.id, userName: user.name, entity: 'users', id, action: ok ? 'confirmed' : 'declined', text: `${ok ? 'Confirmed' : 'Declined'} ${u.name} as ${pos.name}` });
+      });
+      return publicUser(u);
+    },
+    /** A person's own notifications, newest first. */
+    inbox: (user) => db.all('notifications').filter((n) => n.to === user.id).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 60),
+    readInbox(user, ids = null) {
+      db.tx(() => { for (const n of db.all('notifications')) if (n.to === user.id && !n.read && (!ids || ids.includes(n.id))) { n.read = true; db.put('notifications', n); } });
+      return svc.inbox(user);
     },
 
     // ── Records ──
     readable: (user) => ENTITIES.filter((e) => canRead(user, e)).map((e) => e.id),
-    writable: (user) => ENTITIES.filter((e) => canWrite(user, e)).map((e) => e.id),
-    list(user, entityId) { const e = ent(entityId); need(canRead(user, e)); return db.all(entityId).map((d) => strip(user, e, d)); },
-    get(user, entityId, id) { const e = ent(entityId); need(canRead(user, e)); const d = db.get(entityId, id) || fail('Not found.', 404); return strip(user, e, d); },
+    writable: (user) => ENTITIES.filter((e) => mayAdd(user, e)).map((e) => e.id),
+    list(user, entityId) { const e = ent(entityId); need(canRead(user, e)); return db.all(entityId).filter((d) => visible(user, e, d)).map((d) => strip(user, e, d)); },
+    get(user, entityId, id) { const e = ent(entityId); need(canRead(user, e)); const d = db.get(entityId, id) || fail('Not found.', 404); need(visible(user, e, d)); return strip(user, e, d); },
     create(user, entityId, input) {
-      const e = ent(entityId); need(canWrite(user, e), `You cannot add ${e.name.toLowerCase()}.`);
-      return run((touched) => { const ctx = context(user, touched); const doc = validate(e, input || {}, null); for (const k of ['requestedBy', 'checker']) if (fieldsOf(e).some((f) => f.k === k)) doc[k] = user.id; ctx.put(entityId, doc); ctx.log(entityId, doc.id, 'created', `Added ${e.one.toLowerCase()} ${titleOf(e, doc)}`); actions[`hook.created.${entityId}`]?.run(ctx, {}, doc); return { doc: strip(user, e, db.get(entityId, doc.id)) }; });
+      const e = ent(entityId); need(mayAdd(user, e), `You cannot add ${e.name.toLowerCase()}.`);
+      return run((touched) => { const ctx = context(user, touched); const doc = validate(e, input || {}, null); if (!canWrite(user, e)) need(mayChange(user, e, doc), `You can add ${e.name.toLowerCase()} only to a work centre you are in charge of.`); for (const k of ['requestedBy', 'checker']) if (fieldsOf(e).some((f) => f.k === k)) doc[k] = user.id; ctx.put(entityId, doc); ctx.log(entityId, doc.id, 'created', `Added ${e.one.toLowerCase()} ${titleOf(e, doc)}`); actions[`hook.created.${entityId}`]?.run(ctx, {}, doc); return { doc: strip(user, e, db.get(entityId, doc.id)) }; });
     },
     update(user, entityId, id, input) {
-      const e = ent(entityId); need(canWrite(user, e), `You cannot change ${e.name.toLowerCase()}.`);
+      const e = ent(entityId); need(mayAdd(user, e), `You cannot change ${e.name.toLowerCase()}.`);
       return run((touched) => {
         const ctx = context(user, touched); const old = db.get(entityId, id) || fail('Not found.', 404);
+        need(mayChange(user, e, old), RULES[e.id]?.why || `You cannot change this ${e.one.toLowerCase()}.`);
         const editable = !e.statuses || (e.editWhen || [e.initial || Object.keys(e.statuses)[0]]).includes(old.status) || can(user, e.module, 'admin');
         if (!editable) fail(`This ${e.one.toLowerCase()} is ${e.statuses[old.status].name.toLowerCase()} and can no longer be edited.`);
         const secretKeys = can(user, e.module, 'admin') ? [] : fieldsOf(e).filter((f) => f.secret).map((f) => f.k);
         const clean = { ...input }; for (const k of secretKeys) delete clean[k];
-        const doc = validate(e, clean, old); ctx.put(entityId, doc); ctx.log(entityId, id, 'updated', `Changed ${e.one.toLowerCase()} ${titleOf(e, doc)}`);
+        const doc = validate(e, clean, old); if (!canWrite(user, e)) need(mayChange(user, e, doc), 'You can move it only to a work centre you are in charge of.'); ctx.put(entityId, doc); ctx.log(entityId, id, 'updated', `Changed ${e.one.toLowerCase()} ${titleOf(e, doc)}`); actions[`hook.updated.${entityId}`]?.run(ctx, old, doc);
         return { doc: strip(user, e, doc) };
       });
     },
@@ -250,6 +380,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
         const ctx = context(user, touched);
         if (e) {
           doc = db.get(entityId, id) || fail('Not found.', 404);
+          if (RULES[e.id]?.write && !RULES[e.id].write(user, doc)) fail(RULES[e.id].why, 403);
           if (btn.when && !btn.when.includes(doc.status)) fail(`This ${e.one.toLowerCase()} is ${e.statuses[doc.status]?.name.toLowerCase() || doc.status}; that step is not available.`);
           if (btn.form) { const coerced = {}; for (const [k, label, type, o = {}] of btn.form) { const v = coerce({ k, label, type, ...o }, payload[k]); if (v === undefined && o.req) fail(`${label} is needed.`); if (v !== undefined) coerced[k] = v; } payload = { ...payload, ...coerced }; }
         }
@@ -262,14 +393,15 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       return db.logs({ entity: entityId, id, limit });
     },
     /** What a person sees about themselves, whatever their role. */
-    mine(user) {
+    mine(user) { return { ...svc.mineHr(user), inbox: svc.inbox(user) }; },
+    mineHr(user) {
       const emp = db.all('employees').find((x) => x.login === user.id) || null;
       if (!emp) return { employee: null, today: null, leaves: [], kras: [], month: [] };
       const { salary, ...employee } = emp; const t = todayIso();
       const att = db.all('attendance').filter((a) => a.employee === emp.id);
       return { employee, today: att.find((a) => a.date === t) || null, month: att.filter((a) => a.date.slice(0, 7) === t.slice(0, 7)), leaves: db.all('leaves').filter((l) => l.employee === emp.id), kras: db.all('kras').filter((k) => k.employee === emp.id) };
     },
-    levelOf, can,
+    levelOf, can, outbox,
   };
 
   function checkPassword(p) { if (typeof p !== 'string' || p.length < 8) fail('Use a password of at least 8 characters.'); }

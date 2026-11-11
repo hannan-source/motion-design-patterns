@@ -19,7 +19,7 @@ const POOLS = [
 const OPEN = new Set(['planned', 'released', 'in_progress']);
 const CHANNEL_NAMES = { B2B: 'B2B', D2C: 'Shopify', STORE: 'Store', SAMPLE: 'Sample' };
 const LINE_FOR = { B2B: 'stitch_b2b', D2C: 'stitch_d2c', STORE: 'stitch_d2c', SAMPLE: 'stitch_sample' };
-const USES = new Set(['styles', 'work_centres', 'work_orders', 'items', 'rolls', 'dye_lots', 'customers']);
+const USES = new Set(['styles', 'workstations', 'work_orders', 'items', 'rolls', 'dye_lots', 'customers']);
 const LS_KEY = 'deme-plan-assumptions';
 
 const n = (v, fallback = 0) => { const x = Number(v); return Number.isFinite(x) && x >= 0 ? x : fallback; };
@@ -30,7 +30,7 @@ const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 /** Work-centre records grouped into the fixed pools; pools with no record are left out. */
 function pools() {
   const groups = {};
-  for (const wc of data.all('work_centres')) (groups[poolOf(wc)] ||= []).push(wc);
+  for (const wc of data.all('workstations')) (groups[poolOf(wc)] ||= []).push(wc);
   return POOLS.filter((p) => groups[p.id]).map((p) => {
     const list = groups[p.id];
     const people = sum(list, (w) => n(w.people));
@@ -130,13 +130,13 @@ export function planState(assume = planAssumptions()) {
 export function planGaps() {
   const gaps = [];
   const open = openOrders();
-  if (!data.all('work_centres').length) gaps.push({ text: 'No work centres', entity: 'work_centres' });
+  if (!data.all('workstations').length) gaps.push({ text: 'No work centres', entity: 'workstations' });
   else {
     const have = Object.fromEntries(pools().map((p) => [p.id, p]));
-    const check = (id, none, idle) => { if (!have[id]) gaps.push({ text: none, entity: 'work_centres' }); else if (!have[id].ops) gaps.push({ text: idle, entity: 'work_centres' }); };
+    const check = (id, none, idle) => { if (!have[id]) gaps.push({ text: none, entity: 'workstations' }); else if (!have[id].ops) gaps.push({ text: idle, entity: 'workstations' }); };
     check('cut', 'No cutting work centre', 'No people on cutting');
     const lines = [...new Set(open.map((o) => LINE_FOR[o.channel]).filter(Boolean))];
-    if (!open.length && !['stitch_b2b', 'stitch_d2c', 'stitch_sample'].some((id) => have[id])) gaps.push({ text: 'No stitching line', entity: 'work_centres' });
+    if (!open.length && !['stitch_b2b', 'stitch_d2c', 'stitch_sample'].some((id) => have[id])) gaps.push({ text: 'No stitching line', entity: 'workstations' });
     const LINE_GAPS = {
       stitch_b2b: ['No B2B stitching line', 'No people on the B2B stitching line'],
       stitch_d2c: ['No D2C stitching line for Shopify and store orders', 'No people on the D2C stitching line'],

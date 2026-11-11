@@ -185,7 +185,7 @@ export function mount(el, ctx) {
   function start() {
     const steps = [];
     const list = (entity, label) => { if (!data.canWrite(entity)) return; const n = data.all(entity).length; steps.push({ key: entity, label, done: n > 0, note: n ? `${num(n)} added` : 'None yet' }); };
-    list('work_centres', 'Add work centres');
+    list('workstations', 'Add work centres');
     list('items', 'Add materials');
     list('styles', 'Add styles');
     list('suppliers', 'Add suppliers');

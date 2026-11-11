@@ -41,7 +41,7 @@ const guard = async (fn) => { try { return await fn(); } catch (e) { if (e insta
 export const api = {
   get mode() { return mode; },
   /** What this copy of the server has switched on: Google sign-in, AI mapping. */
-  caps: { google: false, ai: false },
+  caps: { google: false, ai: false, mail: false },
   /**
    * Who is signed in, and whether the first account still has to be made. The hosted preview page
    * is marked as such when it is built and keeps its data in this browser; every other copy talks
@@ -59,7 +59,7 @@ export const api = {
     for (let i = 0; i < 3; i++) {
       try {
         const s = await http('GET', 'state');
-        api.caps.google = !!s.google; api.caps.ai = !!s.ai;
+        api.caps.google = !!s.google; api.caps.ai = !!s.ai; api.caps.mail = !!s.mail;
         return s;
       } catch (e) {
         last = e;
@@ -97,6 +97,12 @@ export const api = {
   audit: (entity, id) => (mode === 'server' ? http('GET', `audit?${new URLSearchParams(Object.entries({ entity, id }).filter(([, v]) => v))}`) : guard(async () => local.svc.audit(me(), { entity, id }))),
   createUser: (input) => (mode === 'server' ? http('POST', 'users', input) : guard(async () => local.svc.createUser(me(), input))).then(async (u) => { await data.load(); return u; }),
   updateUser: (id, input) => (mode === 'server' ? http('PUT', `users/${id}`, input) : guard(async () => local.svc.updateUser(me(), id, input))).then(async (u) => { await data.load(); return u; }),
+  /** Say which position I hold. It waits for the head of that work centre, or an admin, to confirm. */
+  pickPosition: (position, station = '') => (mode === 'server' ? http('POST', 'me/position', { position, station }) : guard(async () => local.svc.pickPosition(me(), { position, station }))).then(async (u) => { await data.load(); return u; }),
+  /** Confirm (or turn down) someone's request to join. */
+  decideJoin: (id, ok) => (mode === 'server' ? http('POST', `users/${id}/join`, { ok }) : guard(async () => local.svc.decideJoin(me(), id, ok))).then(async (u) => { await data.load(); return u; }),
+  inbox: () => (mode === 'server' ? http('GET', 'inbox') : guard(async () => local.svc.inbox(me()))),
+  readInbox: async (ids = null) => { const list = await (mode === 'server' ? http('POST', 'inbox/read', { ids }) : guard(async () => local.svc.readInbox(me(), ids))); data.inbox = list; emit(['notifications']); return list; },
   /** Tally import XML for the given vouchers (all open ones if none given). */
   async tallyXml(ids = []) {
     if (mode === 'server') { const res = await fetch(`/api/export/tally?ids=${ids.join(',')}`, { credentials: 'same-origin' }); if (!res.ok) throw new Error('Could not build the export.'); return res.text(); }
@@ -119,29 +125,31 @@ async function change(promise) {
 }
 
 export const data = {
-  user: null, users: [], mine: null, readable: new Set(), writable: new Set(), cache: {}, ready: false,
+  user: null, users: [], mine: null, inbox: [], readable: new Set(), writable: new Set(), cache: {}, ready: false,
   /** Fetch who I am and everything I may read. */
   async load() {
     if (mode === 'server') {   // one request for everything this person may read
       const b = await http('GET', 'all');
-      Object.assign(data, { user: b.user, users: b.users, mine: b.mine, readable: new Set(b.readable), writable: new Set(b.writable), cache: b.data });
+      Object.assign(data, { user: b.user, users: b.users, mine: b.mine, inbox: b.mine?.inbox || [], readable: new Set(b.readable), writable: new Set(b.writable), cache: b.data });
     } else {
       const b = await api.boot();
-      Object.assign(data, { user: b.user, users: b.users, mine: b.mine, readable: new Set(b.readable), writable: new Set(b.writable) });
+      Object.assign(data, { user: b.user, users: b.users, mine: b.mine, inbox: b.mine?.inbox || [], readable: new Set(b.readable), writable: new Set(b.writable) });
       const lists = await Promise.all(b.readable.map((e) => api.list(e)));
       data.cache = Object.fromEntries(b.readable.map((e, i) => [e, lists[i]]));
     }
     data.ready = true; emit(['*']);
   },
   async refresh(touched) {
-    const mineToo = touched.some((t) => ['attendance', 'leaves', 'kras', 'employees'].includes(t));
+    const mineToo = touched.some((t) => ['attendance', 'leaves', 'kras', 'employees', 'notifications', 'work_centres'].includes(t));
     const todo = touched.filter((e) => data.readable.has(e));
     const lists = await Promise.all(todo.map((e) => api.list(e)));
     todo.forEach((e, i) => { data.cache[e] = lists[i]; });
-    if (mineToo) data.mine = (await api.boot()).mine;
+    if (mineToo) { const b = await api.boot(); Object.assign(data, { mine: b.mine, inbox: b.mine?.inbox || [], users: b.users, user: b.user, writable: new Set(b.writable) }); }
     if (touched.length) emit(touched);
   },
-  clear() { Object.assign(data, { user: null, users: [], mine: null, readable: new Set(), writable: new Set(), cache: {}, ready: false }); },
+  /** Look for new notices, and for tasks and comments others have changed. Called on a timer while the app is open. */
+  async poll() { if (!data.ready) return; const before = data.inbox[0]?.id; data.inbox = await api.inbox(); if (data.inbox[0]?.id !== before) { await data.refresh(['tasks', 'comments', 'projects'].filter((e) => data.readable.has(e))); emit(['notifications']); } },
+  clear() { Object.assign(data, { user: null, users: [], mine: null, inbox: [], readable: new Set(), writable: new Set(), cache: {}, ready: false }); },
   all: (entity) => data.cache[entity] || [],
   get: (entity, id) => (data.cache[entity] || []).find((d) => d.id === id) || null,
   /** Display text for a referenced record, or for a team member when entity is 'users'. */
