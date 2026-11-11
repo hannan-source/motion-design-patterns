@@ -34,7 +34,8 @@ Tally ── Tally bridge on the accounts computer ────┤    (bronze)  
 Shopify, DHL ── their own exports or APIs ─────────┘
 ```
 
-1. **ERP and HR.** A service key with a read role calls two things the API already has: the
+1. **ERP and HR.** A service key (its role must be able to read Admin, which guards the feed)
+   calls two things the API already has: the
    ordered event feed (`/api/events?after=`), which never repeats or skips, and a nightly snapshot
    of each record type. The job remembers the last `seq` it loaded.
 2. **Tally.** The bridge planned in `TALLY-CONNECTOR.md` already reads vouchers and ledgers from
