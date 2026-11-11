@@ -44,7 +44,7 @@ const TOOLBAR = '.erp-body .toolbar';
 const LIST = '.erp-body .panel';
 const ROW = '.erp-body [data-open]';
 const TABS = '.erp .tabs';
-const ACTS = '.drawer .drawer-body > .row';
+const ACTS = '.drawer div.drawer-body:not(.stack) > .row'; // the action buttons on an open record
 const FACTS = '.drawer .facts';
 const tab = (id) => `.erp .tabs [data-tab="${id}"]`;
 const act = (id) => `.drawer [data-action="${id}"]`;
@@ -120,8 +120,8 @@ export const TOURS = [
       { route: 'm-projects', target: '#tkPlan .tk-plan', alt: '#tkProjects', title: 'The go-live plan', text: 'A ready set of tasks in eight tracks, each with an owner and dates. It is a proposal you can change.', hint: 'This card goes away once the plan is created.' },
       { route: 'm-projects', target: '#tkPlanStart', alt: '#tkProjects', title: 'Pick the start date', text: 'Choose the day the team starts. The preview shows how the tracks fall across the weeks.' },
       { route: 'm-projects', target: '#tkPlanCreate', alt: '#tkProjects', title: 'Create the plan', text: 'Press this once. Every task is created with its owner by function and its due date.' },
-      { route: 'm-projects', target: '#tkControls', alt: '#tkProjects', title: 'Board and timeline', text: 'Switch between the board and the timeline. Group the board by track or by owner.', hint: 'These controls appear once there are tasks.' },
-      { route: 'm-projects', target: '#tkMain', alt: '#tkProjects', title: 'Give tasks to people', text: 'Open a task to name the person, move its dates, or mark it started, blocked or done.' },
+      { route: 'm-projects', target: '#tkControls', alt: ['#tkPlan .tk-plan', '#tkProjects'], title: 'Board and timeline', text: 'Switch between the board and the timeline. Group the board by track or by owner.', hint: 'These controls appear once there are tasks.' },
+      { route: 'm-projects', target: '#tkMain .tk-board, #tkMain .tk-g', alt: ['#tkMain', '#tkPlan .tk-plan', '#tkProjects'], title: 'Give tasks to people', text: 'Open a task to name the person, move its dates, or mark it started, blocked or done.' },
       { route: 'pulse', target: '.pulse .pl-sec[aria-label="Go-live"]', title: 'Follow it from the Founder view', text: 'The Founder view counts done, late and blocked tasks from the plan each time something changes.' },
     ],
   },
@@ -461,7 +461,7 @@ export const TOURS = [
     steps: [
       { route: 'e-vouchers', target: '.erp-body [data-act="tally"]', alt: TOOLBAR, title: 'Tally export', text: 'Press Tally export. It gathers every voucher not yet in Tally.', hint: 'The button appears once there are vouchers.' },
       { route: 'e-vouchers', open: '.erp-body [data-act="tally"]', target: '.drawer #tallyXml', alt: TOOLBAR, title: 'The import file', text: 'This is Tally Prime import XML. Copy it, or download it as a file.' },
-      { route: 'e-vouchers', open: '.erp-body [data-act="tally"]', target: ACTS, alt: TOOLBAR, title: 'Import it in Tally', text: 'In Tally choose Import, then Transactions, and pick the file.' },
+      { route: 'e-vouchers', open: '.erp-body [data-act="tally"]', target: '.drawer .drawer-body.stack > .row', alt: TOOLBAR, title: 'Import it in Tally', text: 'In Tally choose Import, then Transactions, and pick the file.' },
       { route: 'e-vouchers', open: '.erp-body [data-act="tally"]', target: '.drawer [data-mark]', alt: TOOLBAR, title: 'Mark as in Tally', text: 'After Tally accepts the file, press this so the same vouchers are not sent twice.' },
       { route: 'e-ledgers', target: LIST, title: 'If Tally rejects one', text: 'Check the ledger name here against Tally, correct it, and export again.' },
     ],

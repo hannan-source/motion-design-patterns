@@ -153,6 +153,19 @@ function safeToPress(el) {
   return true;
 }
 
+/**
+ * Press a control. An ERP list handles its own clicks on .tabs and .erp-body, so the click is
+ * stopped at the screen's root: screens visited earlier may have left click handlers on the view
+ * element above it (the Dispatch gate listens there for [data-open]), and those must not fire.
+ */
+function press(b) {
+  const root = document.getElementById('view')?.firstElementChild;
+  const hold = (e) => e.stopPropagation();
+  const guard = !!root && root.matches('.erp') && root.contains(b);
+  if (guard) root.addEventListener('click', hold);
+  try { b.click(); } finally { if (guard) root.removeEventListener('click', hold); }
+}
+
 /** Find a step's target, pressing its `open` controls if it is not on screen yet, else an `alt`. */
 async function locate(step, run) {
   if (!step.target) return { el: null, sel: '' };
@@ -163,7 +176,7 @@ async function locate(step, run) {
     for (const sel of presses) {
       const b = await until(() => find(sel), 700, run);
       if (!b || run !== P.run || !safeToPress(b)) { ok = false; break; }
-      b.click(); P.opened = true;
+      press(b); P.opened = true;
       await wait(30);
     }
     if (ok && run === P.run) el = await until(() => find(step.target), 1200, run);
@@ -255,7 +268,8 @@ function place() {
     if (hole) {
       const underFoot = Math.max(0, hole.y + hole.h - (vh - zone)), underTop = Math.max(0, zone - hole.y);
       const want = P.side === 'top' || P.side === 'bottom' ? P.side : 'bottom';
-      dock = (want === 'bottom' ? underFoot : underTop) < 1 ? want : (underTop < underFoot ? 'top' : 'bottom');
+      // Clear of the target if either end is; else the foot, so long as the top of the target still shows above it.
+      dock = (want === 'bottom' ? underFoot : underTop) < 1 ? want : underFoot < 1 ? 'bottom' : underTop < 1 ? 'top' : (hole.y < vh - zone - 60 ? 'bottom' : 'top');
       if (dock === 'bottom') hole.h = Math.min(hole.h, vh - zone - hole.y);
       else { const y = Math.max(hole.y, zone); hole.h -= y - hole.y; hole.y = y; }
       if (hole.h < 12) hole = null;
@@ -610,7 +624,8 @@ export function mount(el, ctx) {
   }
   const draw = () => { drawRoles(); drawBody(); };
 
-  el.addEventListener('click', (e) => {
+  // Listen on this screen's own root, which goes when the screen goes; `el` outlives it.
+  el.firstElementChild.addEventListener('click', (e) => {
     const r = e.target.closest('[data-role]'), play = e.target.closest('[data-play]');
     if (r) {
       role = r.dataset.role; remember({ role });

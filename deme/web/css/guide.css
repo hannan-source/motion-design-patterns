@@ -74,7 +74,7 @@
   .guide .gu-role::before { transition: opacity .35s var(--ease-out), transform .5s var(--ease-out); }
   .guide .gu-role::after { transition: opacity .25s; }
   .guide .gu-tour { transition: border-color .25s, box-shadow .25s; }
-  .guide .gu-sec { animation: rise .5s var(--ease-out) both; }
+  .guide .gu-sec { animation: rise .35s var(--ease-out) both; }
 }
 
 /* ───── The player ───── */
