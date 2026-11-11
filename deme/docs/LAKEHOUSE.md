@@ -4,25 +4,34 @@ The live system answers "what is true now". The lakehouse answers "what happened
 changed", across the ERP, HR and Tally, without slowing the live system down. It can start at no
 cost and grow without being rebuilt.
 
-## Recommendation
+## Recommendation: BigQuery, to start
+
+Deme works in Google Workspace, so the lakehouse starts in Google too: **BigQuery** for the data
+and **Looker Studio** for dashboards people open like a Google Sheet.
 
 | Layer | Use | Why | Cost to start |
 |---|---|---|---|
 | Live records | Postgres (already the live database) | Small, transactional, backed up | Free tier |
-| Files | Parquet on object storage: Cloudflare R2 | Open format any tool reads; no fee for reading data out | 10 GB free each month |
-| Table format | DuckLake, catalogue kept in Postgres | Adds versions, time travel and safe schema change over the Parquet files; version 1.0 (April 2026) is the first production release | Free, open source |
-| Engine | DuckDB | Runs anywhere: a laptop, a scheduled job, the browser. No cluster to keep running | Free, open source |
-| Scheduled loads | GitHub Actions on a timer | Already used for tests; no new service | Free minutes |
-| Shared SQL and dashboards | MotherDuck (hosted DuckDB) when more than one person queries it | Same SQL, nothing to rewrite | Has a free plan; check its current limits |
+| History and reporting | BigQuery, in Deme's own Google Cloud project | Nothing to run or size; SQL; signs in with the same Google accounts | Free allowance: 10 GB of storage and 1 TB of queries a month |
+| Dashboards | Looker Studio on BigQuery | Shared and permissioned like Google Docs | Free |
+| Scheduled loads | GitHub Actions on a timer, writing through a service account | Already used for tests; no new service | Free minutes |
 
-Deme's data is small by lakehouse standards: tens of thousands of records a year, not billions.
-A warehouse cluster (Databricks, Snowflake) would cost money every month to sit idle. The stack
-above costs nothing until there is real volume, and because the files are plain Parquet, moving up
-later is a matter of pointing a bigger engine at the same bucket.
+What "free" means here, as of November 2026, from Google's own pages:
 
-If Deme would rather stay inside Google, the alternative is **BigQuery with Looker Studio**: the
-same loads write to BigQuery instead of Parquet, and dashboards are shared like Google Sheets.
-BigQuery has a monthly free allowance; the trade is that the data then lives in Google's format.
+- **The sandbox** needs no card and no billing account. It has the same monthly allowance, but
+  every table is deleted 60 days after it is made. Good for a demo; not for keeping history.
+- **The free tier with billing switched on** has the same allowance and nothing expires. Deme's
+  data is tens of megabytes a year, far inside 10 GB, so the bill stays at zero. Switch billing on
+  before the first real load and set a budget alert at a small amount as a safety net.
+
+**BigQuery is not where the app itself keeps its records.** It is built for reading large
+amounts of history, not for many people saving small changes at once: an order being confirmed
+while a roll is inspected and a parcel is scanned. That is what Postgres does, and it is why the
+live site stays on Postgres and copies into BigQuery every night. Both are free at Deme's size.
+
+If Deme later wants to stay out of any one vendor's format, the same loads can write open Parquet
+files to object storage (Cloudflare R2, 10 GB free) and be read with DuckDB or DuckLake. The
+bronze, silver and gold layout below is the same either way.
 
 ## How data gets in
 
@@ -46,7 +55,7 @@ Shopify, DHL ── their own exports or APIs ─────────┘
 
 ## Three layers
 
-- **Bronze, as received.** One file per load, never edited: `bronze/erp/events/2026-11-11.parquet`.
+- **Bronze, as received.** One file per load, never edited: `bronze.erp_events`, partitioned by day.
   If a later step has a bug, everything can be rebuilt from here.
 - **Silver, cleaned.** One table per thing the business talks about: styles, rolls, work orders,
   scans, parcels, vouchers, people, attendance. Types fixed, duplicates removed, ERP and Tally
@@ -57,13 +66,14 @@ Shopify, DHL ── their own exports or APIs ─────────┘
 
 ## Steps
 
-1. **Now, no new services.** Nightly job: events and snapshots to Parquet in an R2 bucket. This is
-   a backup with a memory, and every later step builds on it.
+1. **Now.** Create the Google Cloud project, a `deme` dataset in the Mumbai region and a service
+   account that may write to it. Nightly job: events and snapshots into bronze tables. This is a
+   backup with a memory, and every later step builds on it.
 2. **When the first history questions come** (a quarter of data): add the silver and gold SQL as
-   files in this repository, run by the same job. Query from DuckDB on a laptop.
-3. **When several people want dashboards**: register the tables in DuckLake, attach MotherDuck or
-   an open dashboard tool, and add history panels to the Founder view.
-4. **When cameras arrive** (`VISION-PLAN.md`): readings and clips metadata go to the same bucket;
+   files in this repository, run by the same job as scheduled queries.
+3. **When several people want dashboards**: Looker Studio reports on the gold tables, shared by
+   Google account, and history panels in the Founder view.
+4. **When cameras arrive** (`VISION-PLAN.md`): readings and clip metadata go to the same dataset;
    only the flags reach the ERP. This is where volume starts to matter and the format pays off.
 
 ## Rules that keep it trustworthy

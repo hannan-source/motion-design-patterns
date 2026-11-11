@@ -84,7 +84,8 @@ function toursFor(roleId) {
   return [...mine.filter((t) => t.roles[0] === roleId), ...mine.filter((t) => t.roles[0] !== roleId)];
 }
 function ensureCss() {
-  if (document.querySelector('link[href*="guide.css"]')) return;
+  // Already there as a linked sheet, or inlined into the page (the hosted preview): the sheet sets this marker.
+  if (document.querySelector('link[href*="guide.css"]') || getComputedStyle(document.documentElement).getPropertyValue('--guide-css').trim()) return;
   const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = new URL('../css/guide.css', import.meta.url).href;
   document.head.appendChild(link);
 }

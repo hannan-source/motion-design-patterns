@@ -2,6 +2,7 @@
    .guide  the Guide screen (gu- classes): pick a role, see its tours.
    .gd-    the tour player, which sits on <body> above every screen and the drawer (z 150),
            under the information note (200) and the toast (300). */
+:root { --guide-css: 1; }
 
 /* ───── The Guide screen ───── */
 .guide .gu-count { display: flex; flex-direction: column; gap: 6px; min-width: 150px; }

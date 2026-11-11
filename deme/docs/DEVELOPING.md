@@ -11,6 +11,7 @@ shared/     runs in Node and in the browser
   schema.js   every record type, its fields, statuses and actions; roles and permissions
   service.js  permissions, validation, numbering, audit trail, action dispatch
   actions.js  the business transactions (post a receipt, inspect a roll, scan a parcel ...)
+  org.js      work centres, workstations and positions   collab.js  requests, comments, notices
   engine.js   the production scheduler
   tally.js    vouchers to Tally import XML
   util.js     dates on a Mon–Sat calendar, rupee formatting, small helpers
@@ -19,6 +20,7 @@ web/        the browser app, no build step
   js/ui.js    shared interface pieces        js/fx.js    gradient field shader
   js/erp.js   generic lists, forms, imports  js/home.js, myday.js, scan.js, gate.js, map.js, room.js  purpose-built screens
   js/smart.js bring in data (AI or name matching)   js/guide.js, guides-content.js  role walkthroughs
+  js/journey.js  each person's own steps            js/org.js  work centres and workstations
 test/       node --test
 ```
 
@@ -33,8 +35,10 @@ The browser loads shared code at `/shared/...`, so files in `web/js` import it a
 
 A view module exports `mount(el, ctx)` and returns a cleanup function (or nothing).
 
-- `ctx.go(name, opts)` switches route: `pulse`, `home`, `map`, `room`, `myday`, `scan`, `gate`,
-  `guide`, `import`, `m-<module>`.
+- `ctx.go(name, opts)` switches route: `journey`, `org`, `pulse`, `home`, `map`, `room`, `myday`,
+  `scan`, `gate`, `guide`, `import`, `m-<module>`. `#task-<id>` opens one task in the tracker.
+- Attach listeners to the screen's own root element, never to `el` itself: `el` is reused by the
+  next screen, so a listener left on it keeps firing there.
 - `ctx.openEntity(entityId, opts)` opens a record type in the ERP; `opts` may be `{ id }` to open one
   record or `{ add: true }` to open the add form. `ctx.opts` holds what the previous view passed.
 - Workspace screens render `<div class="workspace"><div class="workspace-inner">…`.

@@ -19,19 +19,19 @@
 // This file imports nothing, so it can be checked with Node on its own.
 
 export const GUIDE_ROLES = [
-  { id: 'founder', name: 'Founder', line: 'Sets direction, approves spend, and watches the whole business and the go-live.', erp: ['founder'] },
-  { id: 'ops', name: 'Operations head', line: 'Runs the system day to day: logins, roles, approvals and the go-live plan.', erp: ['ops_head'] },
+  { id: 'founder', name: 'Founder', line: 'Sees the whole business and the go-live at a glance, tests a change, and decides. Enters nothing.', erp: ['founder'] },
+  { id: 'ops', name: 'Operations head', line: 'Runs the system day to day: logins, roles, approvals and the go-live plan.', erp: ['ops_head', 'admin'] },
   { id: 'prod_manager', name: 'Production manager', also: 'on the floor', line: 'Runs the floor: work orders, daily output, bundles, machines and the weekly plan.', erp: ['production_manager', 'line_manager'] },
   { id: 'prod_b2b', name: 'Production head, B2B', line: 'Owns wholesale orders from the customer\'s PO to shipped and invoiced.', erp: ['production_head', 'b2b'] },
   { id: 'merch', name: 'Merchandising head', line: 'Buys fabric and trims, asks for samples, and keeps styles and collections right.', erp: ['b2b', 'design'] },
-  { id: 'stores', name: 'Stores, inward and outward', line: 'Receives, tags, stores and issues every roll and material, and moves dye lots.', erp: ['b2b', 'qc'] },
+  { id: 'stores', name: 'Stores, inward and outward', line: 'Receives, tags, stores and issues every roll and material, and moves dye lots.', erp: ['stores', 'qc'] },
   { id: 'qc', name: 'Quality', also: 'QC head', line: 'Inspects fabric, checks shade after dyeing, and logs garment checks.', erp: ['qc'] },
-  { id: 'dispatch', name: 'E-com dispatch checker', line: 'Packs online orders, labels parcels and scans everything through the gate.', erp: ['sales'] },
+  { id: 'dispatch', name: 'E-com dispatch checker', line: 'Packs online orders, labels parcels and scans everything through the gate.', erp: ['dispatch', 'sales'] },
   { id: 'logistics', name: 'Logistics', line: 'Tracks parcels and checks courier invoices before they are paid.', erp: ['logistics'] },
   { id: 'finance', name: 'Finance', line: 'Keeps vouchers, bills and receivables right and sends them to Tally.', erp: ['finance'] },
   { id: 'hr', name: 'HR', line: 'Keeps employee records, attendance, leave, KRAs and payroll.', erp: ['hr_admin'] },
   { id: 'tailor', name: 'Tailor or master', also: 'scan only', line: 'Scans a bundle when starting it and again when it is finished.', erp: ['operator'] },
-  { id: 'everyone', name: 'Everyone', also: 'attendance and leave', line: 'Checks in and out, applies for leave, and keeps up with own tasks.', erp: ['staff', 'marketing'] },
+  { id: 'everyone', name: 'Everyone', also: 'attendance and leave', line: 'Checks in and out, applies for leave, and keeps up with own tasks.', erp: ['staff', 'marketing', 'design'] },
 ];
 
 // Selectors that recur on every ERP list (see web/js/erp.js).
@@ -58,22 +58,25 @@ const ROOM_GAPS = '.room .room-gaps';
 export const TOURS = [
   // ───────── Bring the system up to speed ─────────
   {
-    id: 'team', group: 'start', title: 'Add your team', minutes: 3,
-    outcome: 'Every team lead has a login with the right role.',
-    roles: ['founder', 'ops'],
+    id: 'team', group: 'start', title: 'Work centres and your team', minutes: 4,
+    outcome: 'Every work centre has a person in charge and every lead has a login.',
+    roles: ['ops'],
     steps: [
-      { route: 'm-admin', target: '.rail a[data-route="m-admin"]', title: 'Open Admin', text: 'Admin is in the menu under ERP. Only the founder and the operations head can add people.' },
-      { route: 'm-admin', open: tab('team'), target: '.erp-body [data-user="new"]', title: 'Add team member', text: 'Press this once for each team lead. Start with stores, quality, production and finance.' },
-      { route: 'm-admin', open: [tab('team'), '.erp-body [data-user="new"]'], target: '.drawer #uRole', title: 'Pick the role', text: 'The role decides which screens the person can open and what they can change. Tailors and masters get the scan only role.' },
-      { route: 'm-admin', open: [tab('team'), '.erp-body [data-user="new"]'], target: '.drawer #uPass', title: 'Set a first password', text: 'Type 8 characters or more and tell them in person. They can change it later from My day.' },
-      { route: 'm-admin', open: [tab('team'), '.erp-body [data-user="new"]'], target: '.drawer #uExtra', title: 'Also allow', text: 'Tick a module here to let one person edit it without changing their role.' },
+      { route: 'org', target: '.org .og-grid', title: 'How Deme is organised', text: 'Each card is a work centre: a part of the business with one person in charge. A starting set is already here.' },
+      { route: 'org', target: '.org .og-card .og-head', title: 'Name who is in charge', text: 'Press Name someone on each card. That person confirms the people who join, and requests to the work centre go to them.' },
+      { route: 'org', target: '.org .og-card .og-stations', alt: '.org .og-card', title: 'Workstations', text: 'The places inside a work centre where work is done. The person in charge adds and changes these. The number is the headcount.' },
+      { route: 'org', target: '.org [data-add-centre]', alt: '.org .og-grid', title: 'Add or rename', text: 'Change the set to match how Deme really runs. Only the system admin can add or remove a work centre.' },
+      { route: 'm-admin', open: tab('team'), target: '.erp-body [data-user="new"]', title: 'Add each lead', text: 'Press this once for each person in charge. The rest of the team can sign in with Google and pick their own position.' },
+      { route: 'm-admin', open: [tab('team'), '.erp-body [data-user="new"]'], target: '.drawer #uPos', title: 'Pick the position', text: 'The position sets the role and the work centre, and decides which go-live tasks are theirs.' },
+      { route: 'm-admin', open: [tab('team'), '.erp-body [data-user="new"]'], target: '.drawer #uPass', title: 'Password, or Google', text: 'Leave it empty if they sign in with their Deme Google account. Otherwise type 8 characters or more and tell them in person.' },
+      { route: 'journey', target: '.journey .jn-joins', alt: '.journey .jn-me', title: 'Confirm who joins', text: 'People who picked their own position wait here. Confirm the right ones; they get their access and their tasks.' },
       { route: 'm-admin', open: tab('roles'), target: '.erp-body .matrix', title: 'What each role can do', text: 'View is read only. Edit can add and change. Full can also approve, cancel and delete. Scan is the floor tier.' },
     ],
   },
   {
     id: 'import', group: 'start', title: 'Bring in existing lists', minutes: 4,
     outcome: 'The lists you already keep in spreadsheets are in Deme.',
-    roles: ['founder', 'ops', 'prod_manager', 'prod_b2b', 'merch', 'stores', 'finance', 'hr'],
+    roles: ['ops', 'prod_manager', 'prod_b2b', 'merch', 'stores', 'finance', 'hr'],
     steps: [
       { route: 'import', target: '#siFile', title: 'Choose your file', text: 'Pick a spreadsheet you already keep, saved as CSV: suppliers, materials, styles, customers, employees or open orders. One list per file.' },
       { route: 'import', target: '#siPaste', title: 'Or paste the rows', text: 'Copy the rows from Excel or Google Sheets with the heading row on top, and paste them here.' },
@@ -86,13 +89,13 @@ export const TOURS = [
   },
   {
     id: 'lists', group: 'start', title: 'Reference lists by hand', minutes: 4,
-    outcome: 'Materials, styles, work centres, suppliers and customers are filled in.',
-    roles: ['founder', 'ops', 'prod_manager', 'prod_b2b', 'merch', 'stores'],
+    outcome: 'Materials, styles, workstation headcount, suppliers and customers are filled in.',
+    roles: ['ops', 'prod_manager', 'prod_b2b', 'merch', 'stores'],
     steps: [
       { route: 'e-items', target: TABS, title: 'Masters come first', text: 'Every other screen points at these lists. Fill them before raising any order.' },
       { route: 'e-items', open: ADD, target: field('minLevel'), alt: [ADD, TOOLBAR], title: 'Materials with a minimum', text: 'Give each fabric, thread shade, trim and tool a code, a unit and a minimum level. Stock under the minimum shows on Today.' },
       { route: 'e-styles', open: ADD, target: field('smvStitch'), alt: [ADD, TOOLBAR], title: 'Styles with stitch minutes', text: 'Enter minutes per piece for cutting, stitching, finishing, QC and packing. The production plan is built from these.' },
-      { route: 'e-workstations', open: ADD, target: field('people'), alt: [ADD, TOOLBAR], title: 'Work centres with headcount', text: 'One per team: cutting, each stitching line, sampling, finishing, QC, packing. Enter the people really on it today.' },
+      { route: 'e-workstations', open: ADD, target: field('people'), alt: [ADD, TOOLBAR], title: 'Workstations with headcount', text: 'Cutting, each stitching line, sampling, finishing, QC and packing are already listed under Production. Enter the people really on each today.' },
       { route: 'e-suppliers', target: ADD, alt: TOOLBAR, title: 'Suppliers', text: 'Add mills, dyers, trim vendors and couriers with payment terms. The Tally ledger name must match Tally exactly.' },
       { route: 'e-customers', target: ADD, alt: TOOLBAR, title: 'Customers', text: 'Add each wholesale account and your own store, with currency and payment terms.' },
       { route: 'home', target: '.hm-start', alt: '#hmBody', title: 'Watch the list tick off', text: 'Until the first work order, Today shows what is still missing. Each line ticks itself when its list has records.' },
@@ -101,7 +104,7 @@ export const TOURS = [
   {
     id: 'stock', group: 'start', title: 'Opening stock', minutes: 4,
     outcome: 'Every roll is tagged and on-hand figures match the shelves.',
-    roles: ['founder', 'ops', 'stores', 'qc'],
+    roles: ['ops', 'stores', 'qc'],
     steps: [
       { route: 'e-rolls', target: ADD, alt: TOOLBAR, title: 'Add each roll', text: 'One record per roll on the racks: fabric, metres, shade and location. A new roll starts as awaiting inspection.' },
       { route: 'e-rolls', target: TAGS, alt: TOOLBAR, title: 'Print roll tags', text: 'Print tags for the rolls on screen and stick one on each roll. Scanning a tag opens its roll.', hint: 'Print tags appears once there are rolls.' },
@@ -115,7 +118,7 @@ export const TOURS = [
   {
     id: 'golive', group: 'start', title: 'Create the go-live plan', minutes: 3,
     outcome: 'Every team has dated tasks for bringing Deme into daily use.',
-    roles: ['founder', 'ops'],
+    roles: ['ops'],
     steps: [
       { route: 'm-projects', target: '#tkPlan .tk-plan', alt: '#tkProjects', title: 'The go-live plan', text: 'A ready set of tasks in eight tracks, each with an owner and dates. It is a proposal you can change.', hint: 'This card goes away once the plan is created.' },
       { route: 'm-projects', target: '#tkPlanStart', alt: '#tkProjects', title: 'Pick the start date', text: 'Choose the day the team starts. The preview shows how the tracks fall across the weeks.' },
@@ -224,9 +227,9 @@ export const TOURS = [
     outcome: 'Next week\'s priorities are agreed on one schedule.',
     roles: ['prod_manager', 'prod_b2b'],
     steps: [
-      { route: 'room', target: '#roomKpis', alt: ROOM_GAPS, title: 'Start from the plan', text: 'Worked out from open work orders, the people on each work centre and the minutes each style takes.' },
+      { route: 'room', target: '#roomKpis', alt: ROOM_GAPS, title: 'Start from the plan', text: 'Worked out from open work orders, the people on each workstation and the minutes each style takes.' },
       { route: 'room', target: '.room .gantt', alt: ['.room .results', ROOM_GAPS], title: 'The timeline', text: 'Each bar runs from first cut to last piece packed. The upright mark is the due date. Red is time past it.' },
-      { route: 'room', target: '.room .heat-table', alt: ['.room .results', ROOM_GAPS], title: 'Load by work centre', text: 'Darker weeks are busier. A ringed cell is a week with no spare minutes.' },
+      { route: 'room', target: '.room .heat-table', alt: ['.room .results', ROOM_GAPS], title: 'Load by workstation', text: 'Darker weeks are busier. A ringed cell is a week with no spare minutes.' },
       { route: 'room', target: '.room .builder .group:nth-of-type(2)', alt: ROOM_GAPS, title: 'Things that go wrong', text: 'Slide in absent tailors, a faulty fabric lot or bigger orders and see which dates move.' },
       { route: 'room', target: '.room .builder .group:nth-of-type(3)', alt: ROOM_GAPS, title: 'What you can do about it', text: 'Try overtime, extra tailors or stitching sent outside, and choose who goes first.' },
       { route: 'room', target: '.room .room-verdict', alt: ROOM_GAPS, title: 'Agree the week', text: 'Read the answer with merchandising and B2B in the room, then release the work orders you agreed on.' },
@@ -521,6 +524,19 @@ export const TOURS = [
   },
 
   // ───────── Everyone ─────────
+  {
+    id: 'journey', group: 'start', title: 'Your journey', minutes: 2,
+    outcome: 'You know what is yours to do and where to do it.',
+    roles: ['ops', 'prod_manager', 'prod_b2b', 'merch', 'stores', 'qc', 'dispatch', 'logistics', 'finance', 'hr', 'everyone', 'founder'],
+    steps: [
+      { route: 'journey', target: '.journey .jn-me', alt: '.journey .view-head', title: 'Who you are here', text: 'Your position and your work centre. If you have not picked a position yet, this screen asks you to.' },
+      { route: 'journey', target: '.journey .jn-progress', alt: '.journey .jn-me', title: 'How far you are', text: 'Your own steps of the go-live, done out of the total.' },
+      { route: 'journey', target: '.journey .jn-now', alt: '.journey .jn-me', title: 'Do this now', text: 'The next step, the screen it is done on, and Show me how. Mark it done when it meets the test written on it.' },
+      { route: 'journey', target: '.rail .bell', alt: '.topbar .bell', title: 'Notices', text: 'A task given to you, a request to your work centre, a comment or something you were waiting for shows up here, and in your email.' },
+      { route: 'm-projects', target: '.tracker [data-ask]', alt: '.tracker', title: 'Ask another work centre', text: 'Need something from another team? Ask here. It goes to the person in charge, and you hear when it is done.' },
+      { route: 'org', target: '.org .og-grid', title: 'Who is who', text: 'Every work centre, who runs it, its workstations and its people.' },
+    ],
+  },
   {
     id: 'myday', group: 'day', title: 'Check in, leave and your tasks', minutes: 2,
     outcome: 'Your attendance, leave and tasks are up to date.',

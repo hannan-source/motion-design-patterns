@@ -46,6 +46,9 @@ for running the business: data stays on one device. Every other copy uses its se
 | `GET /api/state` | Whether setup is needed, who is signed in, and whether Google sign-in and AI mapping are switched on |
 | `GET /api/auth/google/start`, `/callback` | Google Workspace sign-in (authorisation-code flow, state cookie, domain check) |
 | `GET /api/all` | Everything the person may read, in one request |
+| `POST /api/me/position` | Say which position I hold; it waits to be confirmed |
+| `POST /api/users/:id/join` | Confirm or decline a request to join `{ ok }` (the head of that work centre, or an admin) |
+| `GET /api/inbox`, `POST /api/inbox/read` | My notices |
 | `POST /api/ai/map` | Match spreadsheet columns to a record type: `{ headers, sample, entity? }` |
 | `POST /api/setup` | Create the founder (once) |
 | `POST /api/login`, `POST /api/logout` | Session cookie `deme_sid` (HttpOnly, SameSite=Lax, 14 days) |
@@ -69,6 +72,16 @@ against the schema before anything is shown. Sign-in is throttled per address an
 origin. Static serving is limited to `web/` and `shared/`. Permissions are enforced in the service,
 never only in the interface.
 
+Access has two layers. The role's level on a module decides what a person can open. On top of
+that, single records carry rules: a task can be changed only by the people on it (anyone can
+comment), a project limited to its work centre is invisible to everyone else, and the head of a
+work centre can change its own workstations without wider access to the reference lists. A
+position picked at sign-in grants nothing until it is confirmed.
+
+Notices are written with the change that caused them and emailed only after that change has been
+saved (Resend, when `RESEND_API_KEY` and `MAIL_FROM` are set). A failed email never fails the
+request; the notice is already in the person's inbox in the app.
+
 Still to do before a wide rollout: password reset by email (not needed for people who use
 Google), two-step sign-in for admins who use passwords, and scheduled database backups.
 
@@ -84,7 +97,9 @@ replaced without touching the others.
 | Records | `shared/schema.js`, `shared/service.js` | Data model, permissions, validation, audit |
 | Transactions | `shared/actions.js` | Purchasing, stock, quality, production, sales, logistics, finance, people steps |
 | Planning | `shared/engine.js`, `web/js/plan.js` | The schedule and what-if |
+| Organisation | `shared/org.js` | Work centres, workstations, positions and what each position may do |
 | Go-live and tasks | `shared/golive.js` | The plan template and task steps |
+| Working together | `shared/collab.js` | Requests to a work centre, what a task waits for, comments, notices |
 | Identity | `server/app.js` | Sign-in (password, Google), sessions, service keys |
 | Storage | `server/db.js`, `server/pgstore.js` | The same small interface over SQLite or Postgres |
 | Hosts | `server/index.js`, `netlify/functions/api.mjs` | Turn the host's request into the API's and back |

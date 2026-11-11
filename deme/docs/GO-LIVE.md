@@ -12,9 +12,11 @@ The web app is published as static files. Every `/api/*` request runs one Netlif
 | 3 | The site's address | The Netlify address or Deme's own domain, e.g. `https://intelligence.deme.com` | `PUBLIC_URL` |
 | 4 | Google sign-in | Google Cloud console, in Deme's Workspace: an OAuth consent screen of type **Internal**, then an **OAuth client ID** of type *Web application* with the authorised redirect URI `<PUBLIC_URL>/api/auth/google/callback` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_WORKSPACE_DOMAIN` (e.g. `deme.com`) |
 | 5 | AI reading of spreadsheets | An Anthropic API key (console.anthropic.com) | `ANTHROPIC_API_KEY` |
+| 6 | Email notices | A Resend account (resend.com) with Deme's domain verified, and an API key | `RESEND_API_KEY`, and `MAIL_FROM` such as `Deme Intelligence <intelligence@deme.com>` |
 
-Items 4 and 5 are optional. Without Google the team signs in with email and password. Without the
+Items 4 to 6 are optional. Without Google the team signs in with email and password. Without the
 Anthropic key, "Bring in data" matches columns by name and the person corrects the rest by hand.
+Without the mail key, notices about tasks, comments and requests show in the app only.
 
 Environment variables are set under **Project configuration > Environment variables**. Mark the
 database string, the Google secret and the Anthropic key as secret values. Redeploy after changing any.
@@ -22,13 +24,18 @@ database string, the Google secret and the Anthropic key as secret values. Redep
 ## First run
 
 1. Open the site. The database tables are created on the first request.
-2. Create the founder account (the first screen). This is the only account made this way.
-3. **Admin > Team**: add each person with their role. With Google sign-in on, a person signs in
-   with the Google account whose email is on the team list; no password is needed.
-4. Anyone in the Workspace domain who is *not* on the list and signs in with Google is let in as
-   **Staff** (their own day, leave and tasks only) until an admin gives them a role. Leave
-   `GOOGLE_WORKSPACE_DOMAIN` empty to admit only people already on the list.
-5. **Guide** shows each role what to do first. **Bring in data** takes the existing spreadsheets.
+2. Create the first account. It belongs to whoever is setting the system up (the system admin),
+   not to the founder. It starts with a set of work centres and workstations to adjust.
+3. **Work centres**: rename, add or remove them to match Deme, and name the person in charge of
+   each. Add those people under **Admin > Team** with their position; with Google sign-in on, no
+   password is needed.
+4. **My journey > Create the go-live plan**: pick the start date. Each position gets its dated
+   tasks; the person holding it is told.
+5. Everyone else signs in with their Deme Google account, picks the position they hold, and is
+   confirmed by the head of that work centre (an admin confirms heads, Finance and HR). From then
+   on they open on **My journey**: what to fill in next, the screen it is done on, and a
+   walkthrough of how. The founder opens on the **Founder view** and enters nothing.
+6. Leave `GOOGLE_WORKSPACE_DOMAIN` empty to admit only people already on the team list.
 
 ## How a change goes live
 

@@ -15,7 +15,8 @@ npm install
 npm start            # http://localhost:8800
 ```
 
-The first visit asks you to create the founder account. Add everyone else under **Admin > Team**.
+The first visit asks you to create the first account: the system admin, who shapes the work
+centres, names who is in charge of each and invites the team. The founder is added like everyone else.
 Run this way, the database is one SQLite file at `data/deme.db` (change with `DEME_DB`).
 
 ```bash
@@ -35,13 +36,15 @@ preview link, publish on merge). The same code also runs as one Docker container
 
 | Area | What it does |
 |---|---|
+| **My journey** | Where everyone except the founder opens. Pick the position you hold; once confirmed, see your own part of the go-live in order: what to do now, the screen it is done on, a walkthrough, and how much is already in. Heads confirm who joins them and see their team's progress |
+| **Work centres** | How Deme is organised: each work centre with the person in charge, its workstations and its people. The admin shapes work centres; a head runs the workstations of their own |
 | **Founder view** | Go-live progress by track and by team, and the business at a glance: fabric, production, sales, money, quality |
 | **Today** | What needs attention across the business, sales of the day, a getting-started checklist while lists are empty |
 | **Business map** | 3D model of suppliers, dye house, factory floor, channels and office. Places, flows, zones and parts are clickable and show live figures from the records |
 | **Production room** | Finite-capacity plan from open work orders, styles and work centres. Test a sample run, extra units, a demand jump, absences or a late fabric lot and see what moves |
 | **Scan station** | Tailors and masters scan bundles in and out; gives real minutes per piece |
 | **Dispatch gate** | One scan point for parcels out, returns in and store fit visits |
-| **Projects** | Kanban board and Gantt timeline over the same tasks. "Create the go-live plan" adds 53 dated tasks across 8 tracks with an owner for each |
+| **Projects** | Kanban board and Gantt timeline over the same tasks, for the go-live and every project after it. Anyone can add a task, ask another work centre for something ("I need 80 samples"), comment, mention people and say what a task waits for. Only the people on a task can change it. Notices arrive in the app and by email |
 | **My day** | Check in and out, leave, own KRAs and tasks, for every person |
 | **Guide** | Pick a role and be walked through its day on the real screens, starting with bringing existing data in |
 | **Bring in data** | Drop any spreadsheet or paste rows. Columns are matched to the right record type (by Claude Haiku when a key is set, by name otherwise), checked, and imported with a row-by-row result |
@@ -53,10 +56,18 @@ Every list can be filled by hand, from **Bring in data**, or by CSV import on th
 ### Sign-in
 
 Email and password, or **Sign in with Google** when the Google Workspace settings are present.
-Google accounts on the team list get their role; others in the Workspace domain come in as Staff
-until an admin gives them one.
+Google accounts on the team list get their position; others in the Workspace domain come in, pick
+the position they hold and wait to be confirmed.
 
-### Roles
+### Work centres, positions and roles
+
+A **work centre** is a part of the business with one person in charge (Production, Merchandising,
+Design, Finance). A **workstation** is a place inside it where one kind of work is done (cutting,
+a stitching line, the inspection table, the dispatch gate). A **position** is the job a person
+holds: it places them in a work centre, gives them the role that job needs, and decides which
+go-live tasks are theirs. People pick their position when they first sign in; the head of that
+work centre confirms it, and an admin confirms positions that lead a work centre or handle money.
+
 
 Roles follow the access plan Deme drew up for its ERP evaluation: founder and operations head
 (everything), production head and managers, line manager, tailor or master (scan only), QC,
