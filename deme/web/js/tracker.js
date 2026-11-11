@@ -2,10 +2,13 @@
 // Blocked, Done) and a timeline. It runs the go-live of the ERP itself and any other project.
 // Owners are functions first; a named person can be added later. Where a master's input is
 // needed the task says so, and that is shown as an "Ask" mark on cards and bars.
+// People work on it together: a task can be addressed to a work centre, can wait for other tasks,
+// and carries a thread of comments. Only the people on a task change it; everyone else comments.
 
 import { api, data } from './api.js';
 import { info, esc, toast, oops, busy, drawer, formHtml, readForm, fields, statusTag, fmtDate, fmtStamp, num, $, $$ } from './ui.js';
 import { FUNCTIONS, TRACKS, GOLIVE_TEMPLATE } from '../shared/golive.js';
+import { isMine, positionById } from '../shared/org.js';
 import { MODULES } from '../shared/schema.js';
 import { iso, today, addWorkdays, workdayIndex, DAY, clamp } from '../shared/util.js';
 
@@ -20,6 +23,10 @@ const ICON = {
   ask: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3 2.5h10A1.5 1.5 0 0 1 14.5 4v5.5A1.5 1.5 0 0 1 13 11H8.4l-3.9 3v-3H3a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 3 2.5z" fill="currentColor"/></svg>',
   tick: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   out: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6.5 3.5h-3v9h9v-3M9.5 3.5h3v3M12.5 3.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  wait: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 2.5h8M4 13.5h8M5 2.5V5l3 3 3-3V2.5M5 13.5V11l3-3 3 3v2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  say: '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M3 3h10a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1H8.4L5 13v-2.5H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+  lock: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/></svg>',
+  centre: '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M2 13.5V6.5l3.5-2.5L9 6.5v7M9 13.5V9h5v4.5M1 13.5h14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chev: '<svg class="tk-chev" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
@@ -34,17 +41,21 @@ const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).ma
 const tc = (track) => (TK[track] ? `var(--tk-${track})` : 'var(--ink-3)');
 const isLate = (t, T) => !!t.due && t.due < T && t.status !== 'done';
 const screenName = (r) => SCREENS[r] || (r.startsWith('e-') ? data.entity(r.slice(2).replace(/-/g, '_'))?.name : r.startsWith('m-') ? MODULES[r.slice(2)]?.name : '') || '';
+const AV = ['--tk-kickoff', '--tk-lists', '--tk-floor', '--tk-dispatch', '--tk-finance', '--tk-run', '--data', '--material']; // one steady colour per person
+const hue = (id) => { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return AV[h % AV.length]; };
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function nextMonday() { const d = today(); do d.setDate(d.getDate() + 1); while (d.getDay() !== 1); return iso(d); }
 
 // What the person last chose here, kept while the app is open.
-const mem = { project: null, view: 'board', group: 'none', lanes: new Map(), zoom: 'weeks', owner: '', person: '', track: '', mine: false, late: false, q: '', allDone: false, filtersOpen: false, closed: new Set(), planStart: '' };
+const mem = { project: null, view: 'board', group: 'none', lanes: new Map(), zoom: 'weeks', owner: '', person: '', track: '', centre: '', mine: false, forCentre: false, asked: false, late: false, q: '', drafts: new Map(), allDone: false, filtersOpen: false, closed: new Set(), planStart: '' };
 
 export function mount(el, ctx) {
   const canP = () => data.canWrite('projects'), canT = () => data.canWrite('tasks');
   let open = null;            // the drawer: { d, id, mode }
   let pend = null, drag = null, dirty = false, raf = 0, quietUntil = 0;
-  let asking = null;          // task whose card is asking why it is blocked
+  let asking = null, askText = ''; // task whose card is asking why it is blocked, and what has been typed so far
+  let said = null;            // comments per task, counted once per draw
+  const drawn = {};           // the HTML last put in each part, so a refresh that changes nothing touches nothing
   let gantt = null;           // geometry of the timeline as drawn: { start, days, dw, lw, key }
   let seenKey = '';           // the timeline that was last scrolled to today
   let sum = { ring: 0, planned: 0, done: 0, tracks: {} };
@@ -53,8 +64,8 @@ export function mount(el, ctx) {
   el.innerHTML = `
     <div class="workspace tracker"><div class="workspace-inner">
       <div class="view-head rise">
-        <div class="title-row"><h1 class="reveal">Projects</h1>${info('Each project is a set of tasks with an owner, a start and a due date. The board shows where each task stands; drag a card to another column, or use Move. The timeline shows the same tasks against the calendar; drag a bar to change its dates. Owners are functions, such as Stores, until a person is named. Masters do not use the system, so a task that needs their input carries an Ask mark: someone has to go and ask them.', 'Projects')}</div>
-        ${canP() ? '<button class="btn btn-outline" type="button" id="tkNewProject">New project</button>' : ''}
+        <div class="title-row"><h1 class="reveal">Projects</h1>${info('Each project is a set of tasks with an owner, a start and a due date. The board shows where each task stands; drag a card to another column, or use Move. The timeline shows the same tasks against the calendar; drag a bar to change its dates. Owners are functions, such as Stores, until a person is named. Ask a work centre sends a request to the person in charge of it. Only the people on a task can change it; anyone can comment. A task that waits for others carries an hourglass with the number still open. Masters do not use the system, so a task that needs their input carries an Ask mark: someone has to go and ask them.', 'Projects')}</div>
+        <div class="tk-head-acts">${data.can('projects', 'read') && data.all('work_centres').length ? `<button class="btn btn-primary tk-askbtn" type="button" id="tkAsk">${ICON.ask}Ask a work centre</button>` : ''}${canP() ? '<button class="btn btn-outline" type="button" id="tkNewProject">New project</button>' : ''}</div>
       </div>
       <div class="tk-projects rise" style="--i:1" id="tkProjects" role="group" aria-label="Project"></div>
       <div id="tkPlan" class="rise" style="--i:2"></div>
@@ -64,6 +75,21 @@ export function mount(el, ctx) {
     </div><div class="tk-tip" id="tkTip" role="tooltip" hidden></div></div>`;
   const root = el.firstElementChild, ws = root, tip = $('#tkTip', root);
   const box = (id) => $(`#${id}`, root);
+  const put = (id, html) => { if (drawn[id] === html) return false; drawn[id] = html; box(id).innerHTML = html; return true; };
+
+  // ───────── People, work centres and what a task waits for ─────────
+  const me = () => data.user;
+  const centre = (id) => (id ? data.get('work_centres', id) : null);
+  const inCentre = (t, c) => !!c && (t.centre === c || (!!t.assignee && data.users.find((u) => u.id === t.assignee)?.centre === c));
+  /** The rule the server applies: the people on a task change it, everyone else comments. */
+  const mayChange = (t) => canT() && (data.can('projects', 'admin') || t.createdBy === me().id || isMine(t, me()) || (!!t.centre && centre(t.centre)?.head === me().id) || data.get('projects', t.project)?.owner === me().id);
+  const tagsOf = (t) => String(t.tags || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const depsOf = (t) => (t.dependsOn || []).map((id) => data.get('tasks', id)).filter(Boolean);
+  const waitsOn = (t) => (t.status === 'done' ? [] : depsOf(t).filter((d) => d.status !== 'done'));
+  const holds = (id) => data.all('tasks').filter((x) => (x.dependsOn || []).includes(id));
+  const saidOn = (id) => { if (!said) { said = new Map(); for (const c of data.all('comments')) said.set(c.task, (said.get(c.task) || 0) + 1); } return said.get(id) || 0; };
+  const ownerText = (t) => [FN[t.ownerRole] || centre(t.centre)?.name, data.title('users', t.assignee)].filter(Boolean).join(' · ') || 'No owner';
+  const statusName = (k) => STATUSES.find(([s]) => s === k)?.[1] || '';
 
   // ───────── What is in view ─────────
   const golive = () => data.all('projects').find((p) => p.kind === 'golive') || null;
@@ -78,19 +104,27 @@ export function mount(el, ctx) {
     const p = project();
     return data.all('tasks').filter((t) => p === 'all' || t.project === p).map((t) => (moved.has(t.id) || dated.has(t.id) ? { ...t, ...(dated.get(t.id) || {}), ...(moved.has(t.id) ? { status: moved.get(t.id) } : {}) } : t));
   }
-  const text = (t) => [t.title, t.needs, t.doneWhen, t.notes, t.blockedBy, FN[t.ownerRole], TK[t.track], data.title('users', t.assignee)].join(' ').toLowerCase();
+  const text = (t) => [t.title, t.needs, t.doneWhen, t.notes, t.blockedBy, t.tags, FN[t.ownerRole], TK[t.track], centre(t.centre)?.name, data.title('users', t.assignee)].join(' ').toLowerCase();
   function passes(t, T) {
     const q = mem.q.trim().toLowerCase();
     return (!mem.owner || t.ownerRole === mem.owner)
       && (!mem.person || (mem.person === '-' ? !t.assignee : t.assignee === mem.person))
       && (!mem.track || (mem.track === '-' ? !TK[t.track] : t.track === mem.track))
-      && (!mem.mine || t.assignee === data.user.id) && (!mem.late || isLate(t, T)) && (!q || text(t).includes(q));
+      && (!mem.centre || inCentre(t, mem.centre)) && (!mem.mine || isMine(t, me())) && (!mem.forCentre || inCentre(t, me().centre)) && (!mem.asked || t.createdBy === me().id)
+      && (!mem.late || isLate(t, T)) && (!q || text(t).includes(q));
   }
-  const filterCount = () => [mem.owner, mem.person, mem.track, mem.mine, mem.late, mem.q.trim()].filter(Boolean).length;
-  const clearFilters = () => Object.assign(mem, { owner: '', person: '', track: '', mine: false, late: false, q: '' });
+  const filterCount = () => [mem.owner, mem.person, mem.track, mem.centre, mem.mine, mem.forCentre, mem.asked, mem.late, mem.q.trim()].filter(Boolean).length;
+  const clearFilters = () => Object.assign(mem, { owner: '', person: '', track: '', centre: '', mine: false, forCentre: false, asked: false, late: false, q: '' });
 
   // ───────── Small pieces shared by the board and the timeline ─────────
-  const who = (t) => { const name = data.title('users', t.assignee); return name ? `<span class="tk-av" title="${esc(name)}" aria-label="${esc(name)}">${esc(initials(name))}</span>` : ''; };
+  /** A person as a round mark with their initials. `quiet` when the name is written beside it. */
+  const av = (id, quiet = false) => { const name = data.title('users', id); return name ? `<span class="tk-av" style="--av:var(${hue(id)})" ${quiet ? 'aria-hidden="true"' : `title="${esc(name)}" role="img" aria-label="${esc(name)}"`}>${esc(initials(name))}</span>` : ''; };
+  const who = (t) => av(t.assignee);
+  const centreTag = (t) => { const c = centre(t.centre); return c ? `<span class="tk-ctag" title="For ${esc(c.name)}">${ICON.centre}<span>${esc(c.name)}</span></span>` : ''; };
+  const tagChips = (t) => tagsOf(t).map((g) => `<span class="tk-tagchip">${esc(g)}</span>`).join('');
+  const waitMark = (t) => { const n = waitsOn(t).length, say = `Waiting for ${plural(n, 'task')}`; return n ? `<span class="tk-wait" title="${esc(say)}" role="img" aria-label="${esc(say)}">${ICON.wait}<b>${n}</b></span>` : ''; };
+  const saidMark = (t) => { const n = saidOn(t.id); return n ? `<span class="tk-said" title="${esc(plural(n, 'comment'))}" role="img" aria-label="${esc(plural(n, 'comment'))}">${ICON.say}${esc(num(n))}</span>` : ''; };
+  const lockMark = (p, named = false) => { if (p?.access !== 'centre') return ''; const say = `Only ${centre(p.centre)?.name || 'its work centre'} can see it`; return `<span class="tk-lock${named ? ' is-named' : ''}" title="${esc(say)}" role="img" aria-label="${esc(say)}">${ICON.lock}${named ? `<span>${esc(centre(p.centre)?.name || 'Its work centre')}</span>` : ''}</span>`; };
   const askChip = (t) => (t.needs ? `<p class="tk-ask"><span class="tk-ask-mark">${ICON.ask}Ask</span><span class="tk-ask-who">${esc(t.needs)}</span></p>` : '');
   function dueHtml(t, T) {
     if (t.status === 'done') return `<span class="tk-due is-done">${ICON.tick}${t.doneOn ? `Done ${esc(day(t.doneOn))}` : 'Done'}</span>`;
@@ -105,8 +139,8 @@ export function mount(el, ctx) {
   function drawProjects() {
     const ps = projects(), cur = project();
     const openCount = (id) => data.all('tasks').filter((t) => (id === 'all' || t.project === id) && t.status !== 'done').length;
-    const chip = (id, name) => `<button type="button" class="tk-pchip" aria-pressed="${cur === id}" data-project="${esc(id)}"><span>${esc(name)}</span><span class="tk-pchip-n">${esc(num(openCount(id)))}</span></button>`;
-    box('tkProjects').innerHTML = ps.length ? chip('all', 'All') + ps.map((p) => chip(p.id, p.name)).join('') : '';
+    const chip = (id, name, p) => `<button type="button" class="tk-pchip" aria-pressed="${cur === id}" data-project="${esc(id)}"><span>${esc(name)}</span>${lockMark(p)}<span class="tk-pchip-n">${esc(num(openCount(id)))}</span></button>`;
+    put('tkProjects', ps.length ? chip('all', 'All') + ps.map((p) => chip(p.id, p.name, p)).join('') : '');
     box('tkProjects').hidden = !ps.length;
   }
 
@@ -149,30 +183,30 @@ export function mount(el, ctx) {
   // ───────── Summary strip ─────────
   function drawSummary(all, T) {
     const host = box('tkSummary');
-    if (!all.length) { host.innerHTML = ''; host.hidden = true; return; }
+    if (!all.length) { put('tkSummary', ''); host.hidden = true; return; }
     host.hidden = false;
     const total = all.length, done = all.filter((t) => t.status === 'done').length;
-    const planned = all.filter((t) => t.due && t.due < T).length, late = all.filter((t) => isLate(t, T)).length, blocked = all.filter((t) => t.status === 'blocked').length;
+    const planned = all.filter((t) => t.due && t.due < T).length, late = all.filter((t) => isLate(t, T)).length, blocked = all.filter((t) => t.status === 'blocked').length, waiting = all.filter((t) => waitsOn(t).length).length;
     const gap = done - planned;
     const pace = gap > 0 ? `<span class="tag tag-ok">Ahead by ${esc(num(gap))}</span>` : gap < 0 ? `<span class="tag tag-warn">Behind by ${esc(num(-gap))}</span>` : '<span class="tag tag-ok">On plan</span>';
     const groups = [...TRACKS.map(([k, name]) => ({ k, name })), { k: '-', name: 'Other' }].map((g) => { const mine = all.filter((t) => (g.k === '-' ? !TK[t.track] : t.track === g.k)); return { ...g, n: mine.length, done: mine.filter((t) => t.status === 'done').length }; }).filter((g) => g.n);
     const showTracks = groups.some((g) => g.k !== '-');
     const C = 2 * Math.PI * 52, next = { ring: done / total, planned: planned / total, done: done / total, tracks: Object.fromEntries(groups.map((g) => [g.k, g.done / g.n])) };
     const pcOf = (x) => `${(x * 100).toFixed(1)}%`;
-    host.innerHTML = `
+    if (!put('tkSummary', `
       <section class="panel tk-sum" aria-label="Progress">
         <div class="tk-ring" role="img" aria-label="${esc(`${done} of ${total} tasks done`)}">
           <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="tk-ring-bg" cx="60" cy="60" r="52"/><circle class="tk-ring-fg" cx="60" cy="60" r="52" transform="rotate(-90 60 60)" stroke-dasharray="${C.toFixed(2)}" style="stroke-dashoffset:${(C * (1 - sum.ring)).toFixed(2)}"/></svg>
           <div class="tk-ring-mid"><strong>${esc(num(done))}</strong><span>of ${esc(num(total))} done</span></div>
         </div>
         <div class="tk-pace">
-          <div class="title-row"><p class="eyebrow">Planned against done</p>${info('Planned by today counts the tasks whose due date has passed. Done counts every finished task, early ones included. Late tasks are past their due date and not done. Blocked tasks are waiting on something written on the task.', 'Planned against done')}</div>
+          <div class="title-row"><p class="eyebrow">Planned against done</p>${info('Planned by today counts the tasks whose due date has passed. Done counts every finished task, early ones included. Late tasks are past their due date and not done. Blocked tasks are stopped by something written on the task. Waiting tasks cannot start until the tasks they wait for are done.', 'Planned against done')}</div>
           <div class="tk-pace-row"><span>Planned by today</span><div class="tk-pace-bar is-plan"><i style="--v:${pcOf(sum.planned)}"></i></div><b>${esc(num(planned))}</b></div>
           <div class="tk-pace-row"><span>Done</span><div class="tk-pace-bar"><i style="--v:${pcOf(sum.done)}"></i></div><b>${esc(num(done))}</b></div>
-          <div class="tk-pace-tags">${pace}${late ? `<span class="tag tag-crit">${esc(num(late))} late</span>` : ''}${blocked ? `<span class="tag tag-crit">${esc(num(blocked))} blocked</span>` : ''}</div>
+          <div class="tk-pace-tags">${pace}${late ? `<span class="tag tag-crit">${esc(num(late))} late</span>` : ''}${blocked ? `<span class="tag tag-crit">${esc(num(blocked))} blocked</span>` : ''}${waiting ? `<span class="tag tag-plain">${esc(num(waiting))} waiting</span>` : ''}</div>
         </div>
         ${showTracks ? `<div class="tk-tracks" role="group" aria-label="Tracks">${groups.map((g) => `<button type="button" class="tk-trk" style="--tc:${tc(g.k)}" data-trackf="${esc(g.k)}" aria-pressed="${mem.track === g.k}"><span class="tk-trk-name">${esc(g.name)}</span><span class="tk-trk-n">${g.done}/${g.n}</span><span class="tk-trk-bar"><i data-k="${esc(g.k)}" style="--v:${pcOf(sum.tracks[g.k] || 0)}"></i></span></button>`).join('')}</div>` : ''}
-      </section>`;
+      </section>`)) return;
     // Start from what was on screen and ease to the new figures.
     void host.offsetWidth;
     $('.tk-ring-fg', host).style.strokeDashoffset = (C * (1 - next.ring)).toFixed(2);
@@ -184,15 +218,17 @@ export function mount(el, ctx) {
   // ───────── Controls ─────────
   function drawControls(all) {
     const host = box('tkControls');
-    if (!all.length) { host.innerHTML = ''; host.hidden = true; return; }
+    if (!all.length) { put('tkControls', ''); host.hidden = true; return; }
     host.hidden = false;
     const seg = (attr, cur, opts, label) => `<div class="seg" role="group" aria-label="${esc(label)}">${opts.map(([v, n]) => `<button type="button" data-${attr}="${v}" aria-pressed="${cur === v}">${esc(n)}</button>`).join('')}</div>`;
     const owners = FUNCTIONS.filter(([k]) => mem.owner === k || all.some((t) => t.ownerRole === k));
     const tracks = TRACKS.filter(([k]) => mem.track === k || all.some((t) => t.track === k));
     const people = data.users.filter((u) => u.active !== false || all.some((t) => t.assignee === u.id));
+    const centres = data.all('work_centres').filter((c) => mem.centre === c.id || all.some((t) => inCentre(t, c.id))).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const toggle = (k, name) => `<button type="button" class="tk-toggle" data-toggle="${k}" aria-pressed="${!!mem[k]}">${name}</button>`;
     const opt = (v, n, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(n)}</option>`;
     const n = filterCount();
-    host.innerHTML = `
+    put('tkControls', `
       <div class="tk-controls${mem.filtersOpen ? ' is-open' : ''}">
         ${seg('mode', mem.view, [['board', 'Board'], ['timeline', 'Timeline']], 'View')}
         ${mem.view === 'board' ? `<div class="tk-seg-wrap"><span class="eyebrow">Group</span>${seg('group', mem.group, [['none', 'None'], ['track', 'Track'], ['owner', 'Owner']], 'Group by')}</div>` : `<div class="tk-seg-wrap"><span class="eyebrow">Zoom</span>${seg('zoom', mem.zoom, [['weeks', 'Weeks'], ['days', 'Days']], 'Zoom')}</div>`}
@@ -201,32 +237,34 @@ export function mount(el, ctx) {
           <select class="select" id="tkOwner" aria-label="Owner">${opt('', 'All owners', mem.owner)}${owners.map(([k, name]) => opt(k, name, mem.owner)).join('')}</select>
           <select class="select" id="tkPerson" aria-label="Person">${opt('', 'All people', mem.person)}${opt('-', 'No one yet', mem.person)}${people.map((u) => opt(u.id, u.name, mem.person)).join('')}</select>
           ${tracks.length ? `<select class="select" id="tkTrack" aria-label="Track">${opt('', 'All tracks', mem.track)}${tracks.map(([k, name]) => opt(k, name, mem.track)).join('')}</select>` : ''}
-          <button type="button" class="tk-toggle" data-toggle="mine" aria-pressed="${mem.mine}">Mine</button>
-          <button type="button" class="tk-toggle" data-toggle="late" aria-pressed="${mem.late}">Late</button>
+          ${centres.length ? `<select class="select" id="tkCentre" aria-label="Work centre">${opt('', 'All work centres', mem.centre)}${centres.map((c) => opt(c.id, c.name, mem.centre)).join('')}</select>` : ''}
+          ${toggle('mine', 'Mine')}${me().centre ? toggle('forCentre', 'For my work centre') : ''}${toggle('asked', 'I asked')}${toggle('late', 'Late')}
           <input class="input tk-search" type="search" id="tkSearch" placeholder="Search" aria-label="Search tasks" value="${esc(mem.q)}">
           ${n ? '<button type="button" class="link tk-clear" data-clear>Clear</button>' : ''}
         </div>
         ${canT() ? '<button class="btn btn-primary tk-add" type="button" data-add>Add task</button>' : ''}
-      </div>`;
+      </div>`);
   }
 
   // ───────── Board ─────────
   function cardHtml(t, T) {
-    const ask = asking === t.id, late = isLate(t, T);
+    const ask = asking === t.id, late = isLate(t, T), may = mayChange(t), marks = centreTag(t) + tagChips(t);
     return `
-      <article class="tk-card${late ? ' is-late' : ''}${t.status === 'done' ? ' is-done' : ''}" data-task="${esc(t.id)}" data-status="${esc(t.status)}" style="--tc:${tc(t.track)}">
+      <article class="tk-card${late ? ' is-late' : ''}${t.status === 'done' ? ' is-done' : ''}${waitsOn(t).length ? ' is-waiting' : ''}" data-task="${esc(t.id)}" data-status="${esc(t.status)}" style="--tc:${tc(t.track)}">
         <div class="tk-card-top">
           <span class="tk-track"><i class="tk-swatch"></i>${esc(TK[t.track] || 'Task')}</span>
           <span class="tk-card-tools">
+            ${waitMark(t)}
             ${t.opens ? `<button type="button" class="tk-tool" data-go="${esc(t.id)}" aria-label="Open the screen${screenName(t.opens) ? `: ${esc(screenName(t.opens))}` : ''}" title="Open ${esc(screenName(t.opens) || 'the screen')}">${ICON.out}</button>` : ''}
-            ${canT() && !ask ? `<button type="button" class="tk-tool tk-move" id="tkm-${esc(t.id)}" data-move="${esc(t.id)}" aria-expanded="false">Move${ICON.chev}</button>` : ''}
+            ${may && !ask ? `<button type="button" class="tk-tool tk-move" id="tkm-${esc(t.id)}" data-move="${esc(t.id)}" aria-expanded="false">Move${ICON.chev}</button>` : ''}
           </span>
         </div>
         <button type="button" class="tk-card-title" id="tkc-${esc(t.id)}" data-open="${esc(t.id)}">${esc(t.title)}</button>
-        ${ask ? `<form class="tk-blockform" data-block="${esc(t.id)}"><label for="tkBlock">What is in the way</label><input class="input" id="tkBlock" name="reason" autocomplete="off" required><div class="tk-blockform-row"><button class="btn btn-primary btn-sm" type="submit">Block</button><button class="btn btn-quiet btn-sm" type="button" data-block-cancel>Cancel</button></div></form>` : ''}
+        ${ask ? `<form class="tk-blockform" data-block="${esc(t.id)}"><label for="tkBlock">What is in the way</label><input class="input" id="tkBlock" name="reason" autocomplete="off" required value="${esc(askText)}"><div class="tk-blockform-row"><button class="btn btn-primary btn-sm" type="submit">Block</button><button class="btn btn-quiet btn-sm" type="button" data-block-cancel>Cancel</button></div></form>` : ''}
         ${!ask && t.status === 'blocked' ? `<p class="tk-why"><span>Blocked</span>${esc(t.blockedBy || 'No reason given')}</p>` : ''}
         ${askChip(t)}
-        <div class="tk-card-foot"><span class="tk-owner">${who(t)}<span>${esc(FN[t.ownerRole] || (t.assignee ? data.title('users', t.assignee) : 'No owner'))}</span></span>${dueHtml(t, T)}</div>
+        ${marks ? `<p class="tk-marks">${marks}</p>` : ''}
+        <div class="tk-card-foot"><span class="tk-owner">${who(t)}<span>${esc(FN[t.ownerRole] || (t.assignee ? data.title('users', t.assignee) : centre(t.centre)?.name || 'No owner'))}</span></span><span class="tk-foot-end">${saidMark(t)}${dueHtml(t, T)}</span></div>
       </article>`;
   }
   function boardHtml(tasks, T) {
@@ -277,7 +315,7 @@ export function mount(el, ctx) {
     const lw = narrow ? 146 : 300;
     const dw = mem.zoom === 'days' ? 34 : clamp(Math.floor((width - lw - 2) / days), narrow ? 12 : 14, 30);
     const x = (s) => dayDiff(start, s), t0 = x(T);
-    gantt = { start, days, dw, lw, key: `${project()}|${mem.zoom}|${narrow}` };
+    gantt = { start, days, dw, lw, key: `${project()}|${mem.zoom}|${narrow}`, pos: new Map(), links: [] };
 
     // Axis: months, week-start dates, and single days when zoomed in.
     let months = '', weeks = '', dayCells = '', from = 0;
@@ -290,14 +328,16 @@ export function mount(el, ctx) {
     }
 
     const bar = (r) => {
-      const late = isLate(r, T), n = Math.max(1, x(r.e) - x(r.s) + 1);
-      const state = `${STATUSES.find(([k]) => k === r.status)?.[1] || ''}${late ? `, late by ${plural(dayDiff(r.due, T), 'day')}` : ''}`;
+      const late = isLate(r, T), n = Math.max(1, x(r.e) - x(r.s) + 1), may = mayChange(r), wait = waitsOn(r).length;
+      const state = `${statusName(r.status)}${late ? `, late by ${plural(dayDiff(r.due, T), 'day')}` : ''}${wait ? `, waiting for ${plural(wait, 'task')}` : ''}`;
+      gantt.pos.set(r.id, { s: x(r.s), e: x(r.e) });
+      for (const d of depsOf(r)) gantt.links.push({ from: d.id, to: r.id, done: d.status === 'done' || r.status === 'done' });
       return `${late && t0 > x(r.e) ? `<i class="tk-tail" style="--s:${x(r.e) + 1};--n:${t0 - x(r.e) - 0.5}"></i>` : ''}
-        <div class="tk-bar is-${esc(r.status)}${late ? ' is-late' : ''}${canT() ? ' can-drag' : ''}" id="tkb-${esc(r.id)}" data-bar="${esc(r.id)}" tabindex="0" role="button" aria-label="${esc(`${r.title}. ${FN[r.ownerRole] || 'No owner'}. ${day(r.s)} to ${day(r.e)}. ${state}${r.needs ? `. Ask ${r.needs}` : ''}`)}" style="--s:${x(r.s)};--n:${n}">
-          ${r.status === 'done' ? `<span class="tk-bar-tick">${ICON.tick}</span>` : ''}${r.needs ? `<span class="tk-bar-ask">${ICON.ask}</span>` : ''}${canT() ? '<span class="tk-bar-grip"></span>' : ''}
+        <div class="tk-bar is-${esc(r.status)}${late ? ' is-late' : ''}${wait ? ' is-waiting' : ''}${may ? ' can-drag' : ''}" id="tkb-${esc(r.id)}" data-bar="${esc(r.id)}" tabindex="0" role="button" aria-label="${esc(`${r.title}. ${ownerText(r)}. ${day(r.s)} to ${day(r.e)}. ${state}${r.needs ? `. Ask ${r.needs}` : ''}`)}" style="--s:${x(r.s)};--n:${n}">
+          ${r.status === 'done' ? `<span class="tk-bar-tick">${ICON.tick}</span>` : ''}${r.needs ? `<span class="tk-bar-ask">${ICON.ask}</span>` : ''}${may ? '<span class="tk-bar-grip"></span>' : ''}
         </div>`;
     };
-    const label = (r) => `<button type="button" class="tk-g-label" id="tkl-${esc(r.id)}" data-open="${esc(r.id)}"><span class="tk-g-title">${esc(r.title)}</span><span class="tk-g-owner">${r.needs ? `<span class="tk-g-askdot" title="Ask ${esc(r.needs)}">${ICON.ask}</span>` : ''}${esc(FN[r.ownerRole] || 'No owner')}${r.assignee ? ` · ${esc(data.title('users', r.assignee))}` : ''}</span></button>`;
+    const label = (r) => `<button type="button" class="tk-g-label" id="tkl-${esc(r.id)}" data-open="${esc(r.id)}"><span class="tk-g-title">${esc(r.title)}</span><span class="tk-g-owner">${waitMark(r)}${r.needs ? `<span class="tk-g-askdot" title="Ask ${esc(r.needs)}">${ICON.ask}</span>` : ''}<span>${esc(ownerText(r))}</span>${saidMark(r)}</span></button>`;
     const hasTracks = tasks.some((t) => TK[t.track]);
     const groups = [...TRACKS.map(([k, name]) => ({ k, name })), { k: '-', name: hasTracks ? 'No track' : 'Tasks' }];
     const groupHtml = (g) => {
@@ -317,46 +357,85 @@ export function mount(el, ctx) {
     const looseHtml = loose.length ? `
         <div class="tk-g-group is-loose" style="--tc:${tc('')}">
           <div class="tk-g-row is-group"><button type="button" class="tk-g-label" id="tkf-loose" data-fold="loose" aria-expanded="${!mem.closed.has('loose')}">${ICON.chev}<span class="tk-g-name">Unscheduled</span><span class="tk-g-prog">${loose.length}</span></button><div class="tk-g-lane"></div></div>
-          ${mem.closed.has('loose') ? '' : loose.map((r) => `<div class="tk-g-row" data-row="${esc(r.id)}">${label(r)}<div class="tk-g-lane">${canT() ? `<button type="button" class="btn btn-sm btn-outline tk-setdates" data-setdates="${esc(r.id)}">Set dates</button>` : ''}</div></div>`).join('')}
+          ${mem.closed.has('loose') ? '' : loose.map((r) => `<div class="tk-g-row" data-row="${esc(r.id)}">${label(r)}<div class="tk-g-lane">${mayChange(r) ? `<button type="button" class="btn btn-sm btn-outline tk-setdates" data-setdates="${esc(r.id)}">Set dates</button>` : ''}</div></div>`).join('')}
         </div>` : '';
     const key = (cls, name) => `<span class="tk-key"><i class="${cls}"></i>${name}</span>`;
+    const body = groups.map(groupHtml).join('') + looseHtml; // drawing the rows also notes where each bar sits and what it waits for
     return `
-      <div class="tk-legend" aria-label="Key">${key('tk-bar is-todo', 'To do')}${key('tk-bar is-doing', 'Doing')}${key('tk-bar is-done', 'Done')}${key('tk-bar is-blocked', 'Blocked')}${key('tk-bar is-todo is-late', 'Late')}<span class="tk-key"><span class="tk-bar-ask">${ICON.ask}</span>Ask someone</span></div>
+      <div class="tk-legend" aria-label="Key">${key('tk-bar is-todo', 'To do')}${key('tk-bar is-doing', 'Doing')}${key('tk-bar is-done', 'Done')}${key('tk-bar is-blocked', 'Blocked')}${key('tk-bar is-todo is-late', 'Late')}${key('tk-bar is-todo is-waiting', 'Waiting')}${gantt.links.length ? '<span class="tk-key"><i class="tk-key-link"></i>Waits for</span>' : ''}<span class="tk-key"><span class="tk-bar-ask">${ICON.ask}</span>Ask someone</span></div>
       <div class="tk-g${mem.zoom === 'days' ? ' is-days' : ''}" id="tkGantt" tabindex="0" role="group" aria-label="Timeline" style="--dw:${dw}px;--days:${days};--lw:${lw}px;--t:${t0}">
         <div class="tk-g-in">
           <div class="tk-g-head"><div class="tk-g-corner"><span class="eyebrow">Task</span></div><div class="tk-g-axis" aria-hidden="true"><div class="tk-g-months">${months}${month(from, days)}</div>${weeks}${dayCells}<span class="tk-g-now">Today</span></div></div>
-          <div class="tk-g-body"><div class="tk-g-grid" aria-hidden="true"><i class="tk-g-today"></i></div>${groups.map(groupHtml).join('')}${looseHtml}</div>
+          <div class="tk-g-body"><div class="tk-g-grid" aria-hidden="true"><i class="tk-g-today"></i></div>${body}</div>
         </div>
       </div>`;
   }
 
+  /**
+   * Thin connectors from the tasks a bar waits for to that bar, between rows that are both on
+   * screen. Out of the end of the first, down its right side, into the start of the second; where
+   * the second starts before the first ends the line doubles back between the rows and turns red.
+   */
+  function drawLinks(g) {
+    const body = $('.tk-g-body', g), { dw, lw, pos } = gantt;
+    const links = gantt.links.filter((l) => pos.has(l.from) && pos.has(l.to));
+    if (!body || !links.length || links.length > 80) return;
+    const mid = (id) => { const row = $(`.tk-g-row[data-row="${CSS.escape(id)}"]`, body); return row ? { y: row.offsetTop + row.offsetHeight / 2, h: row.offsetHeight } : null; };
+    const round = (p) => {
+      let d = `M${p[0][0]} ${p[0][1]}`;
+      for (let i = 1; i < p.length; i++) {
+        const [x, y] = p[i], [px, py] = p[i - 1], nx = p[i + 1];
+        if (!nx) { d += `L${x} ${y}`; break; }
+        const r = Math.min(4, Math.hypot(x - px, y - py) / 2, Math.hypot(nx[0] - x, nx[1] - y) / 2);
+        d += `L${x - Math.sign(x - px) * r} ${y - Math.sign(y - py) * r}Q${x} ${y} ${x + Math.sign(nx[0] - x) * r} ${y + Math.sign(nx[1] - y) * r}`;
+      }
+      return d;
+    };
+    let out = '';
+    for (const l of links) {
+      const a = mid(l.from), b = mid(l.to); if (!a || !b) continue;
+      const x1 = lw + (pos.get(l.from).e + 1) * dw - 2, x2 = lw + pos.get(l.to).s * dw + 1, back = x2 - x1 < 14;
+      const turn = a.y + Math.sign(b.y - a.y) * (a.h / 2);
+      const p = back ? [[x1, a.y], [x1 + 7, a.y], [x1 + 7, turn], [x2 - 9, turn], [x2 - 9, b.y], [x2, b.y]] : [[x1, a.y], [x1 + 7, a.y], [x1 + 7, b.y], [x2, b.y]];
+      out += `<g class="tk-link${l.done ? ' is-done' : back ? ' is-clash' : ''}"><path d="${round(p)}"/><path class="tk-link-tip" d="M${x2 - 4.5} ${b.y - 3.5}L${x2} ${b.y}L${x2 - 4.5} ${b.y + 3.5}"/></g>`;
+    }
+    body.insertAdjacentHTML('beforeend', `<svg class="tk-links" width="${lw + gantt.days * dw}" height="${body.offsetHeight}" aria-hidden="true">${out}</svg>`);
+  }
+
   function drawMain(all, T) {
     const host = box('tkMain');
+    let html = '', mode = '';
+    if (!data.all('projects').length) html = canP() ? '' : '<p class="tk-line">No projects yet.</p>';
+    else if (!all.length) html = `<div class="panel empty"><h3>No tasks yet</h3>${canT() ? '<button class="btn btn-primary" type="button" data-add>Add task</button>' : ''}</div>`;
+    else {
+      const shown = all.filter((t) => passes(t, T) || asking === t.id);
+      if (!shown.length) html = '<div class="panel empty"><h3>No tasks match</h3><button class="btn btn-outline" type="button" data-clear>Clear filters</button></div>';
+      else { mode = mem.view; html = mode === 'board' ? boardHtml(shown, T) : ganttHtml(shown, T, host.clientWidth); }
+    }
+    if (drawn.tkMain === html) return; // nothing changed: leave the scroll, an open menu and the pointer alone
     hideTip();
-    if (!data.all('projects').length) { host.innerHTML = canP() ? '' : '<p class="tk-line">No projects yet.</p>'; return; }
-    if (!all.length) { host.innerHTML = `<div class="panel empty"><h3>No tasks yet</h3>${canT() ? '<button class="btn btn-primary" type="button" data-add>Add task</button>' : ''}</div>`; return; }
-    const shown = all.filter((t) => passes(t, T) || asking === t.id);
-    if (!shown.length) { host.innerHTML = '<div class="panel empty"><h3>No tasks match</h3><button class="btn btn-outline" type="button" data-clear>Clear filters</button></div>'; return; }
     const board = $('#tkBoard', host), g = $('#tkGantt', host);
-    const keep = { bx: board?.scrollLeft, gx: g?.scrollLeft, gy: g?.scrollTop };
-    if (mem.view === 'board') {
-      host.innerHTML = boardHtml(shown, T);
+    const keep = { bx: board?.scrollLeft, gx: g?.scrollLeft, gy: g?.scrollTop, top: ws.scrollTop };
+    drawn.tkMain = html; host.innerHTML = html;
+    if (mode === 'board') {
       const b = $('#tkBoard', host);
       if (keep.bx) b.scrollLeft = keep.bx;
       syncColnav();
       if (asking) $('#tkBlock', host)?.focus({ preventScroll: false });
-    } else {
-      host.innerHTML = ganttHtml(shown, T, host.clientWidth);
+    } else if (mode === 'timeline') {
       const n = $('#tkGantt', host);
+      drawLinks(n);
       if (seenKey === gantt.key && keep.gx !== undefined) { n.scrollLeft = keep.gx; n.scrollTop = keep.gy; }
       else { n.scrollLeft = Math.max(0, (dayDiff(gantt.start, T) + 0.5) * gantt.dw - (n.clientWidth - gantt.lw) * 0.3); seenKey = gantt.key; }
     }
+    if (ws.scrollTop !== keep.top) ws.scrollTop = keep.top;
   }
 
   function render() {
     if (drag) { dirty = true; return; }
     const a = document.activeElement, fid = a && root.contains(a) ? a.id : '', sel = fid && a.selectionStart != null && a.type !== 'date' ? [a.selectionStart, a.selectionEnd] : null;
     const T = iso(today()), all = scope();
+    said = null;
     if (asking && !all.some((t) => t.id === asking)) asking = null;
     drawProjects(); drawPlan(); drawSummary(all, T); drawControls(all); drawMain(all, T);
     if (fid && document.activeElement?.id !== fid) { const n = $(`#${CSS.escape(fid)}`, root); if (n) { n.focus({ preventScroll: true }); if (sel) try { n.setSelectionRange(sel[0], sel[1]); } catch { /* not a text box */ } } }
@@ -375,12 +454,12 @@ export function mount(el, ctx) {
 
   // ───────── Tooltip over the timeline ─────────
   function tipHtml(t, T) {
-    const s = t.start || t.due, e = t.due || t.start, late = isLate(t, T);
-    return `<strong>${esc(TK[t.track] || 'Task')} · ${esc(STATUSES.find(([k]) => k === t.status)?.[1] || '')}${late ? ` · late by ${esc(plural(dayDiff(t.due, T), 'day'))}` : ''}</strong>
+    const s = t.start || t.due, e = t.due || t.start, late = isLate(t, T), wait = waitsOn(t);
+    return `<strong>${esc(TK[t.track] || 'Task')} · ${esc(statusName(t.status))}${late ? ` · late by ${esc(plural(dayDiff(t.due, T), 'day'))}` : ''}</strong>
       <p class="tk-tip-title">${esc(t.title)}</p>
-      <p>${esc(FN[t.ownerRole] || 'No owner')}${t.assignee ? ` · ${esc(data.title('users', t.assignee))}` : ''}</p>
+      <p>${esc(ownerText(t))}</p>
       <p>${esc(day(s))} to ${esc(day(e))} · ${esc(plural(workSpan(s, e), 'working day'))}</p>
-      ${t.needs ? `<p><em>Ask</em>${esc(t.needs)}</p>` : ''}${t.doneWhen ? `<p><em>Done when</em>${esc(t.doneWhen)}</p>` : ''}${t.status === 'blocked' && t.blockedBy ? `<p><em>Blocked by</em>${esc(t.blockedBy)}</p>` : ''}`;
+      ${wait.length ? `<p><em>Waits for</em>${esc(wait.map((d) => d.title).join(', '))}</p>` : ''}${t.needs ? `<p><em>Ask</em>${esc(t.needs)}</p>` : ''}${t.doneWhen ? `<p><em>Done when</em>${esc(t.doneWhen)}</p>` : ''}${t.status === 'blocked' && t.blockedBy ? `<p><em>Blocked by</em>${esc(t.blockedBy)}</p>` : ''}`;
   }
   function placeTip(node) {
     const g = $('#tkGantt', root); if (!g) return;
@@ -485,7 +564,7 @@ export function mount(el, ctx) {
     st.node.classList.remove('is-lifted', 'is-drag');
     hideTip(); quietUntil = Date.now() + 350;
   }
-  const after = () => { dirty = false; render(); };
+  const after = () => { dirty = false; drawn.tkMain = null; render(); };
   function drop(st) {
     if (st.kind === 'card') {
       const to = st.over.dataset.col;
@@ -509,7 +588,7 @@ export function mount(el, ctx) {
   function moveTo(id, status) {
     const t = data.get('tasks', id);
     if (!t || t.status === status) return render();
-    if (status === 'blocked') { asking = id; return render(); }
+    if (status === 'blocked') { asking = id; askText = ''; return render(); }
     moved.set(id, status); render();
     api.act('task.move', { id, status }).catch(oops).finally(() => { moved.delete(id); render(); });
   }
@@ -534,33 +613,76 @@ export function mount(el, ctx) {
   }
 
   // ───────── Drawers ─────────
-  const head = (eyebrow, title) => `<header class="drawer-head"><div><p class="eyebrow tk-d-eyebrow">${eyebrow}</p><h2>${esc(title)}</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button></header>`;
-  function taskHtml(t) {
-    const T = iso(today()), can = canT(), late = isLate(t, T), p = data.get('projects', t.project);
+  const headIn = (eyebrow, title) => `<div><p class="eyebrow tk-d-eyebrow">${eyebrow}</p><h2>${esc(title)}</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button>`;
+  const head = (eyebrow, title) => `<header class="drawer-head">${headIn(eyebrow, title)}</header>`;
+  const taskHead = (t) => { const p = data.get('projects', t.project); return headIn(`<i class="tk-swatch" style="--tc:${tc(t.track)}"></i><span>${esc(TK[t.track] || 'Task')}${p ? ` · ${esc(p.name)}` : ''}</span>${lockMark(p, true)}`, t.title); };
+  /** Another task as a chip: its state, its name, and a way to open it. */
+  const depChip = (d) => `<button type="button" class="tk-depchip" data-status="${esc(d.status)}" data-task-open="${esc(d.id)}">${d.status === 'done' ? `<span class="tk-lane-tick">${ICON.tick}</span>` : '<i class="tk-dot" aria-hidden="true"></i>'}<span class="tk-depchip-t">${esc(d.title)}</span><small>${esc(statusName(d.status))}</small></button>`;
+
+  /** Everything above the comments. Redrawn when the task changes; the comment box below it never is. */
+  function topHtml(t) {
+    const T = iso(today()), can = mayChange(t), late = isLate(t, T), wait = waitsOn(t), deps = depsOf(t), held = holds(t.id);
     const acts = can ? (data.entity('tasks').actions || []).filter((a) => a.when.includes(t.status)) : [];
     const people = data.users.filter((u) => u.active !== false || u.id === t.assignee);
     const fact = (label, html) => `<div><dt>${esc(label)}</dt><dd>${html}</dd></div>`;
     const long = (label, value) => (value ? `<div class="tk-d-long"><p class="eyebrow">${esc(label)}</p><p>${esc(value)}</p></div>` : '');
+    const person = (label, id) => (data.title('users', id) ? `<span class="tk-person"><small>${label}</small>${av(id, true)}<b>${esc(data.title('users', id))}</b></span>` : '');
+    const marks = person('On it', t.assignee) + person('Asked by', t.createdBy) + centreTag(t) + tagChips(t);
+    const facts = (TK[t.track] ? fact('Track', `<span class="tk-d-track" style="--tc:${tc(t.track)}"><i class="tk-swatch"></i>${esc(TK[t.track])}</span>`) : '') + (FN[t.ownerRole] ? fact('Owner', esc(FN[t.ownerRole])) : '')
+      + (can ? '' : fact('Start', t.start ? esc(day(t.start)) : '–') + fact('Due', t.due ? esc(day(t.due)) : '–'));
+    const chips = (label, list) => (list.length ? `<div class="tk-d-deps"><p class="eyebrow">${label}</p><div class="tk-chips">${list.map(depChip).join('')}</div></div>` : '');
+    return `
+      <div class="tk-d-status">
+        <span class="tk-d-tags">${statusTag('tasks', t.status)}${late ? `<span class="tag tag-crit">Late by ${esc(plural(dayDiff(t.due, T), 'day'))}</span>` : ''}${wait.length ? `<span class="tk-wait">${ICON.wait}<b>Waiting for ${wait.length}</b></span>` : ''}${t.status === 'done' && t.doneOn ? `<span class="tk-d-note">Done on ${esc(day(t.doneOn))}</span>` : ''}</span>
+        <span class="tk-d-steps">${acts.map((a) => `<button class="btn ${a.id === 'task.done' ? 'btn-primary' : 'btn-outline'}" type="button" data-step="${esc(a.id)}">${esc(a.label)}</button>`).join('')}</span>
+      </div>
+      ${can ? '' : `<p class="tk-d-fixed">${ICON.lock}<span>Only the people on this task can change it.</span>${info('The person on the task, whoever asked for it, the head of its work centre and the project owner can change it. Anyone can comment.', 'Who can change it')}</p>`}
+      <form class="action-form tk-d-reason" id="tkdReasonForm" hidden><div class="field"><label for="tkdReason">What is in the way</label><input class="input" id="tkdReason" autocomplete="off" required></div><div class="row"><button class="btn btn-primary" type="submit">Mark as blocked</button><button class="btn btn-quiet" type="button" data-reason-cancel>Cancel</button></div></form>
+      ${t.status === 'blocked' ? `<div class="tk-d-blocked"><p class="eyebrow">Blocked by</p><p>${esc(t.blockedBy || 'No reason given')}</p></div>` : ''}
+      ${marks ? `<div class="tk-d-people">${marks}</div>` : ''}
+      ${facts ? `<dl class="facts">${facts}</dl>` : ''}
+      ${can ? `<div class="tk-d-edit">
+        <div class="field"><label for="tkdPerson">Person</label><select class="select" id="tkdPerson"><option value="">No one yet</option>${people.map((u) => `<option value="${esc(u.id)}" ${u.id === t.assignee ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
+        <div class="field"><label for="tkdStart">Start</label><input class="input" type="date" id="tkdStart" value="${esc(t.start || '')}"></div>
+        <div class="field"><label for="tkdDue">Due</label><input class="input" type="date" id="tkdDue" value="${esc(t.due || '')}"></div>
+      </div>` : ''}
+      ${chips('Waits for', deps)}${chips('Holding up', held)}
+      ${t.needs ? `<div class="tk-d-ask"><p class="eyebrow"><span class="tk-bar-ask">${ICON.ask}</span>Needs input from</p><p>${esc(t.needs)}</p></div>` : ''}
+      ${long('Done when', t.doneWhen)}${long('Notes', t.notes)}
+      ${t.opens ? `<div class="row"><button class="btn btn-outline" type="button" data-screen>Open the screen</button>${screenName(t.opens) ? `<span class="eyebrow">${esc(screenName(t.opens))}</span>` : ''}</div>` : ''}
+      ${can || data.can('projects', 'admin') ? `<div class="row">${can ? '<button class="btn btn-sm btn-outline" type="button" data-edit>Edit</button>' : ''}${data.can('projects', 'admin') ? '<button class="btn btn-sm btn-quiet" type="button" data-delete>Delete</button>' : ''}</div>` : ''}`;
+  }
+
+  // ───────── Comments ─────────
+  /** A comment as HTML: escaped, with the people it names marked. Line breaks are kept by the style. */
+  function sayText(text, names) {
+    const s = String(text || '');
+    let out = '', i = 0;
+    if (names) for (const m of s.matchAll(names)) {
+      if (m.index > 0 && /\w/.test(s[m.index - 1])) continue; // part of an address, not a mention
+      out += `${esc(s.slice(i, m.index))}<b class="tk-at-name">${esc(m[0])}</b>`; i = m.index + m[0].length;
+    }
+    return out + esc(s.slice(i));
+  }
+  function threadHtml(id) {
+    const list = data.all('comments').filter((c) => c.task === id).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    const words = [...new Set(data.users.flatMap((u) => [u.name, String(u.name).split(/\s+/)[0]]).filter(Boolean))].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const names = words.length ? new RegExp(`@(?:${words.join('|')})(?!\\w)`, 'gi') : null;
+    return list.length ? list.map((c) => `
+      <li class="tk-say${c.by === me().id ? ' is-me' : ''}">${av(c.by, true) || '<span class="tk-av" aria-hidden="true"></span>'}<div class="tk-say-in"><p class="tk-say-by"><b>${esc(data.title('users', c.by) || 'Someone')}</b><time datetime="${esc(c.createdAt)}">${esc(fmtStamp(c.createdAt))}</time></p><p class="tk-say-text">${sayText(c.text, names)}</p></div></li>`).join('') : '<li class="tk-say-none">No comments yet</li>';
+  }
+  /** The frame of the task drawer. Its parts are filled, and later refreshed one by one, by refreshDrawer. */
+  function taskHtml(t) {
     return `
       <div class="tracker tk-drawer">
-        ${head(`<i class="tk-swatch" style="--tc:${tc(t.track)}"></i>${esc(TK[t.track] || 'Task')}${p ? ` · ${esc(p.name)}` : ''}`, t.title)}
+        <header class="drawer-head" id="tkdHead"></header>
         <div class="drawer-body">
-          <div class="tk-d-status">
-            <span class="tk-d-tags">${statusTag('tasks', t.status)}${late ? `<span class="tag tag-crit">Late by ${esc(plural(dayDiff(t.due, T), 'day'))}</span>` : ''}${t.status === 'done' && t.doneOn ? `<span class="tk-d-note">Done on ${esc(day(t.doneOn))}</span>` : ''}</span>
-            <span class="tk-d-steps">${acts.map((a) => `<button class="btn ${a.id === 'task.done' ? 'btn-primary' : 'btn-outline'}" type="button" data-step="${esc(a.id)}">${esc(a.label)}</button>`).join('')}</span>
-          </div>
-          <form class="action-form tk-d-reason" id="tkdReasonForm" hidden><div class="field"><label for="tkdReason">What is in the way</label><input class="input" id="tkdReason" autocomplete="off" required></div><div class="row"><button class="btn btn-primary" type="submit">Mark as blocked</button><button class="btn btn-quiet" type="button" data-reason-cancel>Cancel</button></div></form>
-          ${t.status === 'blocked' ? `<div class="tk-d-blocked"><p class="eyebrow">Blocked by</p><p>${esc(t.blockedBy || 'No reason given')}</p></div>` : ''}
-          <dl class="facts">${fact('Track', `<span class="tk-d-track" style="--tc:${tc(t.track)}"><i class="tk-swatch"></i>${esc(TK[t.track] || 'None')}</span>`)}${fact('Owner', esc(FN[t.ownerRole] || 'None'))}${can ? '' : fact('Person', esc(data.title('users', t.assignee) || 'No one yet')) + fact('Start', t.start ? esc(day(t.start)) : '–') + fact('Due', t.due ? esc(day(t.due)) : '–')}</dl>
-          ${can ? `<div class="tk-d-edit">
-            <div class="field"><label for="tkdPerson">Person</label><select class="select" id="tkdPerson"><option value="">No one yet</option>${people.map((u) => `<option value="${esc(u.id)}" ${u.id === t.assignee ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></div>
-            <div class="field"><label for="tkdStart">Start</label><input class="input" type="date" id="tkdStart" value="${esc(t.start || '')}"></div>
-            <div class="field"><label for="tkdDue">Due</label><input class="input" type="date" id="tkdDue" value="${esc(t.due || '')}"></div>
-          </div>` : ''}
-          ${t.needs ? `<div class="tk-d-ask"><p class="eyebrow"><span class="tk-bar-ask">${ICON.ask}</span>Needs input from</p><p>${esc(t.needs)}</p></div>` : ''}
-          ${long('Done when', t.doneWhen)}${long('Notes', t.notes)}
-          ${t.opens ? `<div class="row"><button class="btn btn-outline" type="button" data-screen>Open the screen</button>${screenName(t.opens) ? `<span class="eyebrow">${esc(screenName(t.opens))}</span>` : ''}</div>` : ''}
-          <div class="row">${can ? '<button class="btn btn-sm btn-outline" type="button" data-edit>Edit</button>' : ''}${data.can('projects', 'admin') ? '<button class="btn btn-sm btn-quiet" type="button" data-delete>Delete</button>' : ''}</div>
+          <div class="tk-d-top" id="tkdTop"></div>
+          <section class="tk-talk" aria-labelledby="tkdTalkH">
+            <div class="title-row"><p class="eyebrow" id="tkdTalkH">Comments</p><span class="tk-count" id="tkdSaid"></span>${info('Anyone who can see a task can comment on it. Type @ and a name to tell that person. The person on the task, whoever asked for it and everyone who has already commented are told as well.', 'Comments')}</div>
+            <ol class="tk-thread" id="tkdThread"></ol>
+            <form class="tk-compose" id="tkdCompose">${av(me().id, true)}<div class="tk-compose-box"><ul class="tk-at" id="tkdAt" role="listbox" aria-label="People to mention" hidden></ul><textarea class="input" id="tkdSay" rows="2" placeholder="Write a comment" aria-label="Write a comment" aria-autocomplete="list" aria-controls="tkdAt" autocomplete="off">${esc(mem.drafts.get(t.id) || '')}</textarea></div><button class="btn btn-primary" type="submit">Send</button></form>
+          </section>
           <div class="trail"><p class="eyebrow">Activity</p><ul class="trail-list"><li class="faint">Loading</li></ul></div>
         </div>
       </div>`;
@@ -578,27 +700,85 @@ export function mount(el, ctx) {
     closeMenus(); hideTip();
     const d = drawer(taskHtml(t), { onClose: () => { clearTimeout(open?.saver); open = null; } });
     open = { d, id, mode: 'view' };
-    wireTask(); loadTrail();
+    wireTask(); refreshDrawer();
     if (focus) $(`#${focus}`, d.el)?.focus();
   }
+  /** Bring the open task up to date, part by part. What is being typed, and where the drawer is scrolled, stay as they are. */
   function refreshDrawer() {
     if (!open || open.mode !== 'view') return;
     const t = data.get('tasks', open.id);
     if (!t) return open.d.close();
-    const a = document.activeElement, inside = a && open.d.el.contains(a);
-    if (inside && (a.type === 'date' || a.id === 'tkdReason')) { open.stale = true; return; } // do not pull a field away mid-entry
-    open.stale = false;
-    open.d.set(taskHtml(t)); loadTrail();
-    if (inside && a.id) $(`#${CSS.escape(a.id)}`, open.d.el)?.focus(); else if (inside) open.d.el.focus();
+    const el = open.d.el, a = document.activeElement, body = $('.drawer-body', el), y = body.scrollTop;
+    const part = (id, html) => {
+      const n = $(`#${id}`, el);
+      if (!n || n.tkHtml === html) return false;
+      const had = n.contains(a) ? a.id || '-' : '';
+      n.tkHtml = html; n.innerHTML = html;
+      if (had) ($(`#${CSS.escape(had)}`, n) || el).focus({ preventScroll: true });
+      return true;
+    };
+    let changed = part('tkdHead', taskHead(t));
+    if ($('#tkdTop', el).contains(a) && (a.type === 'date' || a.id === 'tkdReason')) open.stale = true; // do not pull a field away mid-entry
+    else { open.stale = false; changed = part('tkdTop', topHtml(t)) || changed; }
+    changed = part('tkdThread', threadHtml(t.id)) || changed;
+    $('#tkdSaid', el).textContent = num(saidOn(t.id));
+    if (body.scrollTop !== y) body.scrollTop = y;
+    if (changed) loadTrail();
   }
   function wireTask() {
     const { d, id } = open, on = { entity: 'tasks', id };
     const save = (input) => api.update('tasks', id, input).then(() => toast('Saved')).catch(oops);
+
+    // The comment box: what is typed is kept per task, @ offers names, Ctrl or Cmd with Enter sends.
+    const say = $('#tkdSay', d.el), atBox = $('#tkdAt', d.el);
+    let at = null; // the names on offer: { from, list, i }
+    const size = () => { say.style.height = 'auto'; say.style.height = `${Math.min(say.scrollHeight + 2, 220)}px`; };
+    const keep = () => { if (say.value) mem.drafts.set(id, say.value); else mem.drafts.delete(id); size(); };
+    const atClose = () => { at = null; atBox.hidden = true; say.removeAttribute('aria-activedescendant'); };
+    const atDraw = () => {
+      const m = /(?:^|[\s(])@([^\s@]*(?: [^\s@]*)?)$/.exec(say.value.slice(0, say.selectionStart));
+      const q = m ? m[1].toLowerCase() : '';
+      const list = m ? data.users.filter((u) => u.active !== false && u.id !== me().id && (u.name.toLowerCase().startsWith(q) || u.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)))).slice(0, 6) : [];
+      if (!list.length) return atClose();
+      at = { from: say.selectionStart - m[1].length - 1, list, i: Math.min(at?.i || 0, list.length - 1) };
+      atBox.innerHTML = list.map((u, i) => `<li role="option" id="tkdAt-${i}" data-at="${i}" aria-selected="${i === at.i}">${av(u.id, true)}<span>${esc(u.name)}</span><small>${esc(positionById[u.position]?.name || '')}</small></li>`).join('');
+      atBox.hidden = false; say.setAttribute('aria-activedescendant', `tkdAt-${at.i}`);
+    };
+    const atPick = (i) => {
+      const u = at.list[i], v = say.value, pos = at.from + u.name.length + 2;
+      say.value = `${v.slice(0, at.from)}@${u.name} ${v.slice(say.selectionStart)}`;
+      say.focus(); say.setSelectionRange(pos, pos); atClose(); keep();
+    };
+    const send = () => {
+      const text = say.value.trim();
+      if (!text) return say.focus();
+      atClose();
+      busy($('#tkdCompose [type="submit"]', d.el), async () => {
+        await api.act('task.comment', { id, text });
+        if (say.value.trim() === text) { say.value = ''; keep(); } // anything typed while it was sending stays
+        $('#tkdThread', d.el)?.lastElementChild?.scrollIntoView({ block: 'nearest' });
+      });
+    };
+    say.addEventListener('input', () => { keep(); atDraw(); });
+    say.addEventListener('click', atDraw);
+    say.addEventListener('blur', atClose);
+    say.addEventListener('keydown', (e) => {
+      if (at) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); at.i = (at.i + (e.key === 'ArrowDown' ? 1 : at.list.length - 1)) % at.list.length; return atDraw(); }
+        if ((e.key === 'Enter' && !e.ctrlKey && !e.metaKey) || e.key === 'Tab') { e.preventDefault(); return atPick(at.i); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return atClose(); } // close the names, not the drawer
+      }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); }
+    });
+    atBox.addEventListener('mousedown', (e) => { e.preventDefault(); const li = e.target.closest('[data-at]'); if (li && at) atPick(Number(li.dataset.at)); });
+    size();
+
     d.el.onclick = (ev) => {
       if (!open || open.mode !== 'view') return;
-      const t = data.get('tasks', id), step = ev.target.closest('[data-step]'), del = ev.target.closest('[data-delete]');
+      const t = data.get('tasks', id), step = ev.target.closest('[data-step]'), del = ev.target.closest('[data-delete]'), other = ev.target.closest('[data-task-open]');
       if (!t) return;
-      if (step) {
+      if (other) showTask(other.dataset.taskOpen);
+      else if (step) {
         const a = data.entity('tasks').actions.find((x) => x.id === step.dataset.step);
         if (a.form) { const f = $('#tkdReasonForm', d.el); f.hidden = false; $('#tkdReason', d.el).focus(); return; }
         busy(step, async () => { const out = await api.act(a.id, {}, on); toast(out.message || `${a.label}: done`); });
@@ -611,6 +791,7 @@ export function mount(el, ctx) {
       }
     };
     d.el.onsubmit = (ev) => {
+      if (ev.target.id === 'tkdCompose') { ev.preventDefault(); return send(); }
       if (ev.target.id !== 'tkdReasonForm') return;
       ev.preventDefault();
       const reason = $('#tkdReason', d.el).value.trim();
@@ -636,34 +817,88 @@ export function mount(el, ctx) {
     };
     if (!d.wired) { d.wired = true; d.el.addEventListener('focusout', () => setTimeout(() => { if (open?.d === d && open.stale) refreshDrawer(); }, 0)); }
   }
-  /** The full form in the drawer: a new project, a new task, or a task being edited. */
-  function formDrawer({ entity, eyebrow, title, values, submit, save, back }) {
-    const fs = fields(entity);
+  function showTask(id) {
+    const t = data.get('tasks', id);
+    if (!open || !t) return;
+    clearTimeout(open.saver);
+    open.mode = 'view'; open.id = id; open.d.set(taskHtml(t)); wireTask(); refreshDrawer(); open.d.el.focus();
+  }
+
+  /**
+   * "Waits for" in the task form: the other tasks of the same project, found by typing, with the
+   * chosen ones as chips. Tasks that already wait for this one are left out: they would form a loop.
+   */
+  function depPicker(t) {
+    const chosen = (t?.dependsOn || []).filter((id) => data.get('tasks', id));
+    const loop = new Set(); const walk = (id) => { for (const x of holds(id)) if (!loop.has(x.id)) { loop.add(x.id); walk(x.id); } };
+    if (t) walk(t.id);
+    let form = null, q = '', at = -1, list = [];
+    const draw = () => {
+      const boxEl = $('[data-dep]', form), input = $('#tkDepQ', form), p = form.elements.project?.value || '';
+      list = data.all('tasks').filter((x) => x.project === p && x.id !== t?.id && !chosen.includes(x.id) && !loop.has(x.id) && (!q || String(x.title).toLowerCase().includes(q)))
+        .sort((a, b) => (a.status === 'done') - (b.status === 'done') || String(a.due || '9').localeCompare(String(b.due || '9')) || String(a.title).localeCompare(String(b.title)));
+      at = clamp(at, -1, list.length - 1);
+      $('.tk-dep-chosen', boxEl).innerHTML = chosen.map((id) => { const d = data.get('tasks', id); return `<span class="tk-depchip" data-status="${esc(d.status)}">${d.status === 'done' ? `<span class="tk-lane-tick">${ICON.tick}</span>` : '<i class="tk-dot" aria-hidden="true"></i>'}<span class="tk-depchip-t">${esc(d.title)}</span><button type="button" class="tk-x" data-dep-del="${esc(id)}" aria-label="Remove ${esc(d.title)}">×</button></span>`; }).join('');
+      $('.tk-dep-list', boxEl).innerHTML = list.length
+        ? list.map((x, i) => `<li role="option" id="tkDepO-${esc(x.id)}" data-dep-add="${esc(x.id)}" data-status="${esc(x.status)}" aria-selected="${i === at}"><i class="tk-dot" aria-hidden="true"></i><span class="tk-dep-t">${esc(x.title)}</span><small>${esc(x.status === 'done' ? 'Done' : x.due ? day(x.due) : '')}</small></li>`).join('')
+        : `<li class="tk-dep-none">${!p ? 'Choose the project first' : q ? 'Nothing matches' : 'No other tasks in this project'}</li>`;
+      if (at >= 0) { input.setAttribute('aria-activedescendant', `tkDepO-${list[at].id}`); $('[aria-selected="true"]', boxEl)?.scrollIntoView({ block: 'nearest' }); } else input.removeAttribute('aria-activedescendant');
+    };
+    const add = (id) => { chosen.push(id); q = ''; at = -1; const input = $('#tkDepQ', form); input.value = ''; draw(); input.focus(); };
+    return {
+      html: `<div class="field wide tk-dep" data-dep><label for="tkDepQ">Waits for ${info('This task cannot start until the tasks chosen here are done. The person on it is told when the way is clear.', 'Waits for')}</label><div class="tk-dep-chosen"></div><div class="tk-dep-find"><input class="input" type="search" id="tkDepQ" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="tkDepList" aria-autocomplete="list" placeholder="Find a task in this project"><ul class="tk-dep-list" id="tkDepList" role="listbox" aria-label="Tasks in this project"></ul></div></div>`,
+      read: () => chosen.slice(),
+      wire(f) {
+        form = f; draw();
+        const boxEl = $('[data-dep]', form), input = $('#tkDepQ', form);
+        form.addEventListener('change', (e) => { if (e.target.name === 'project') draw(); });
+        input.addEventListener('input', () => { q = input.value.trim().toLowerCase(); at = q ? 0 : -1; draw(); });
+        input.addEventListener('focus', () => { input.setAttribute('aria-expanded', 'true'); draw(); });
+        input.addEventListener('blur', () => input.setAttribute('aria-expanded', 'false'));
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (list.length) { at = e.key === 'ArrowDown' ? Math.min(at + 1, list.length - 1) : Math.max(at - 1, 0); draw(); } }
+          else if (e.key === 'Enter') { e.preventDefault(); if (list[at]) add(list[at].id); } // never sends the whole form
+          else if (e.key === 'Escape' && input.value) { e.preventDefault(); e.stopPropagation(); input.value = ''; q = ''; at = -1; draw(); }
+        });
+        boxEl.addEventListener('mousedown', (e) => { if (e.target.closest('.tk-dep-list')) e.preventDefault(); }); // keep the search box in hand while choosing
+        boxEl.addEventListener('click', (e) => {
+          const plus = e.target.closest('[data-dep-add]'), minus = e.target.closest('[data-dep-del]');
+          if (plus) add(plus.dataset.depAdd);
+          else if (minus) { chosen.splice(chosen.indexOf(minus.dataset.depDel), 1); draw(); input.focus(); }
+        });
+      },
+    };
+  }
+
+  /** The full form in the drawer: a new project, a new task, or a task being edited. `custom` fields bring their own control. */
+  function formDrawer({ entity, eyebrow, title, values, submit, save, back, custom = {} }) {
+    const fs = fields(entity).filter((f) => !f.ro), plain = fs.filter((f) => !custom[f.k]);
     const html = `<div class="tracker tk-drawer">${head(esc(eyebrow), title)}
-      <form class="drawer-body form-grid" novalidate>${formHtml(fs, values)}
+      <form class="drawer-body form-grid" novalidate>${fs.map((f) => (custom[f.k] ? custom[f.k].html : formHtml([f], values))).join('')}
         <p class="error wide" role="alert" hidden></p>
         <div class="row wide"><button class="btn btn-primary" type="submit">${esc(submit)}</button><button class="btn btn-quiet" type="button" ${back ? 'data-back' : 'data-close'}>Cancel</button></div></form></div>`;
     let d;
-    if (back && open) { d = open.d; d.set(html); d.el.onchange = null; d.el.onsubmit = null; d.el.scrollTop = 0; }
+    if (back && open) { d = open.d; clearTimeout(open.saver); d.set(html); d.el.onchange = null; d.el.onsubmit = null; d.el.scrollTop = 0; }
     else { d = drawer(html, { onClose: () => { open = null; } }); open = { d, id: null, mode: 'form' }; }
     open.mode = 'form';
     const form = $('form', d.el), err = $('.error', form);
+    for (const c of Object.values(custom)) c.wire(form);
     form.querySelector('input,select,textarea')?.focus();
     d.el.onclick = (ev) => { if (ev.target.closest('[data-back]')) back(); };
     form.onsubmit = (ev) => {
       ev.preventDefault(); err.hidden = true;
       busy(form.querySelector('[type="submit"]'), async () => {
-        try { await save(readForm(form, fs), d); } catch (ex) { err.textContent = ex.message; err.hidden = false; err.scrollIntoView({ block: 'nearest' }); }
+        try { await save({ ...readForm(form, plain), ...Object.fromEntries(Object.entries(custom).map(([k, c]) => [k, c.read()])) }, d); } catch (ex) { err.textContent = ex.message; err.hidden = false; err.scrollIntoView({ block: 'nearest' }); }
       });
     };
   }
-  function showTask(id) { const t = data.get('tasks', id); if (!open || !t) return; open.mode = 'view'; open.id = id; open.d.set(taskHtml(t)); wireTask(); loadTrail(); open.d.el.focus(); }
   function taskForm(id) {
     const t = id ? data.get('tasks', id) : null, ps = data.all('projects');
     const p = project() !== 'all' ? project() : ps.length === 1 ? ps[0].id : '';
     formDrawer({
       entity: 'tasks', eyebrow: t ? 'Edit task' : 'New task', title: t ? t.title : 'Task', submit: t ? 'Save' : 'Add task',
       values: t || { project: p, track: TK[mem.track] ? mem.track : '', ownerRole: mem.owner, start: iso(today()) },
+      custom: { dependsOn: depPicker(t) },
       back: t ? () => showTask(id) : null,
       save: async (input, d) => {
         if (t) { await api.update('tasks', id, input); toast('Saved'); showTask(id); }
@@ -673,9 +908,45 @@ export function mount(el, ctx) {
   }
   function projectForm() {
     formDrawer({
-      entity: 'projects', eyebrow: 'New project', title: 'Project', submit: 'Add project', values: { start: iso(today()), owner: data.user.id },
+      entity: 'projects', eyebrow: 'New project', title: 'Project', submit: 'Add project', values: { start: iso(today()), owner: data.user.id, access: 'everyone' },
       save: async (input, d) => { const out = await api.create('projects', input); mem.project = out.doc.id; toast('Project added'); d.close(); render(); },
     });
+  }
+  /** Ask a work centre for something. It goes to the person in charge as a task under Requests between teams. */
+  function askForm() {
+    const centres = data.all('work_centres').slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const pick = (c) => { const name = data.title('users', c.head); return `<label class="tk-pick-opt${name ? '' : ' is-open'}"><input type="radio" name="centre" value="${esc(c.id)}"><span class="tk-pick-name">${esc(c.name)}</span><span class="tk-pick-head">${name ? `${av(c.head, true)}<span>${esc(name)}</span>` : '<span class="tk-av is-none" aria-hidden="true"></span><span>Nobody in charge yet</span>'}</span></label>`; };
+    const d = drawer(`<div class="tracker tk-drawer">${head('Request', 'Ask a work centre')}
+      <form class="drawer-body tk-askform" novalidate>
+        <div class="tk-pick" role="radiogroup" aria-labelledby="tkAskWho">
+          <div class="title-row"><p class="eyebrow" id="tkAskWho">Work centre</p>${info('Your request goes to the person in charge of the work centre as a task. They can answer on it, and you are told when it is done. Where nobody is in charge yet the request is kept, but nobody is told.', 'Ask a work centre')}</div>
+          <div class="tk-pick-grid">${centres.map(pick).join('')}</div>
+        </div>
+        <div class="field"><label for="tkAskTitle">What you need</label><input class="input" id="tkAskTitle" name="title" autocomplete="off" maxlength="200" required></div>
+        <div class="field tk-ask-due"><label for="tkAskDue">Needed by</label><input class="input" type="date" id="tkAskDue" name="due" min="${esc(iso(today()))}"></div>
+        <div class="field"><label for="tkAskNotes">Details</label><textarea class="input" id="tkAskNotes" name="notes"></textarea></div>
+        <p class="error" role="alert" hidden></p>
+        <div class="row"><button class="btn btn-primary tk-big" type="submit">Send</button><button class="btn btn-quiet" type="button" data-close>Cancel</button></div>
+      </form></div>`, { onClose: () => { open = null; } });
+    open = { d, id: null, mode: 'form' };
+    const form = $('form', d.el), err = $('.error', form);
+    const fail = (msg, field) => { err.textContent = msg; err.hidden = false; field?.focus(); };
+    $('input[name="centre"]', form)?.focus();
+    form.onsubmit = (ev) => {
+      ev.preventDefault(); err.hidden = true;
+      const f = form.elements, title = f.title.value.trim();
+      if (!f.centre.value) return fail('Choose the work centre you are asking.', $('input[name="centre"]', form));
+      if (!title) return fail('Say what you need.', f.title);
+      busy(form.querySelector('[type="submit"]'), async () => {
+        try {
+          const out = await api.act('task.ask', { centre: f.centre.value, title, due: f.due.value, notes: f.notes.value });
+          toast(out.message || 'Sent.');
+          const t = data.get('tasks', out.data?.task);
+          if (!t || open?.d !== d) return d.close();
+          mem.project = t.project; mem.allDone = false; asking = null; render(); showTask(t.id);
+        } catch (ex) { fail(ex.message); }
+      });
+    };
   }
 
   // ───────── Events ─────────
@@ -685,6 +956,7 @@ export function mount(el, ctx) {
     let b;
     if ((b = hit('[data-project]'))) { mem.project = b.dataset.project; mem.allDone = false; asking = null; render(); }
     else if (hit('#tkNewProject')) projectForm();
+    else if (hit('#tkAsk')) askForm();
     else if ((b = hit('#tkPlanCreate'))) busy(b, async () => { const out = await api.act('golive.create', { start: $('#tkPlanStart', root).value }); mem.project = out.data?.project || golive()?.id || 'all'; toast(out.message || 'Go-live plan created.'); render(); });
     else if ((b = hit('[data-trackf]'))) { mem.track = mem.track === b.dataset.trackf ? '' : b.dataset.trackf; render(); }
     else if ((b = hit('[data-mode]'))) { mem.view = b.dataset.mode; asking = null; render(); }
@@ -712,9 +984,10 @@ export function mount(el, ctx) {
     if (c.id === 'tkOwner') { mem.owner = c.value; render(); }
     else if (c.id === 'tkPerson') { mem.person = c.value; render(); }
     else if (c.id === 'tkTrack') { mem.track = c.value; render(); }
+    else if (c.id === 'tkCentre') { mem.centre = c.value; render(); }
     else if (c.id === 'tkPlanStart' && c.value) { mem.planStart = c.value; const prev = planPreview(c.value); box('tkPlanFigs').innerHTML = prev.figs; box('tkPlanPrev').innerHTML = prev.mini; }
   };
-  const onInput = (e) => { if (e.target.id === 'tkSearch') { mem.q = e.target.value; redrawMain(); } };
+  const onInput = (e) => { if (e.target.id === 'tkSearch') { mem.q = e.target.value; redrawMain(); } else if (e.target.id === 'tkBlock') askText = e.target.value; };
   const onSubmit = (e) => {
     const f = e.target.closest('.tk-blockform'); if (!f) return;
     e.preventDefault();
@@ -723,8 +996,9 @@ export function mount(el, ctx) {
     block(f.dataset.block, reason);
   };
   const onDown = (e) => {
-    if (e.button > 0 || !e.isPrimary || pend || drag || !canT()) return;
-    const bar = e.target.closest('.tk-bar[data-bar]'), card = e.target.closest('.tk-card');
+    if (e.button > 0 || !e.isPrimary || pend || drag) return;
+    const bar = e.target.closest('.tk-bar[data-bar]'), card = e.target.closest('.tk-card'), t = data.get('tasks', bar?.dataset.bar || card?.dataset.task);
+    if (!t || !mayChange(t)) return;
     if (bar) arm(e, { kind: e.target.closest('.tk-bar-grip') ? 'size' : 'shift', node: bar, id: bar.dataset.bar });
     else if (card && card.dataset.task !== asking && !e.target.closest('.tk-card-tools, .tk-menu, form')) arm(e, { kind: 'card', node: card, id: card.dataset.task });
   };
@@ -749,19 +1023,20 @@ export function mount(el, ctx) {
   document.addEventListener('keydown', onKey); window.addEventListener('resize', onResize);
 
   // ───────── Opened from another screen ─────────
-  const o = ctx.opts || {};
+  const o = ctx.opts || {}, wanted = ctx.route?.task || o.task;
   let first = null;
-  if (o.track || o.owner || o.task) {
+  if (o.track || o.owner || wanted) {
     clearFilters();
     if (o.track && TK[o.track]) { mem.track = o.track; if (golive()) mem.project = golive().id; }
     if (o.owner && FN[o.owner]) mem.owner = o.owner;
-    const t = o.task && data.get('tasks', o.task);
+    const t = wanted && data.get('tasks', wanted);
     if (t) { mem.project = data.get('projects', t.project) ? t.project : 'all'; first = t.id; }
   }
 
   render();
   if (first) openTask(first);
-  const off = data.on(render);
+  // Others change tasks and comment while this is open. Notices alone change nothing drawn here.
+  const off = data.on((touched = ['*']) => { said = null; if (touched.length && touched.every((x) => x === 'notifications')) return; render(); });
   return () => {
     off(); if (drag) finish(drag); disarm(); cancelAnimationFrame(raf); clearTimeout(resizeT); clearTimeout(open?.saver);
     document.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize);
