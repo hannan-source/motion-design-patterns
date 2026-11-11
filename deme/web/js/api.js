@@ -97,6 +97,13 @@ export const api = {
   audit: (entity, id) => (mode === 'server' ? http('GET', `audit?${new URLSearchParams(Object.entries({ entity, id }).filter(([, v]) => v))}`) : guard(async () => local.svc.audit(me(), { entity, id }))),
   createUser: (input) => (mode === 'server' ? http('POST', 'users', input) : guard(async () => local.svc.createUser(me(), input))).then(async (u) => { await data.load(); return u; }),
   updateUser: (id, input) => (mode === 'server' ? http('PUT', `users/${id}`, input) : guard(async () => local.svc.updateUser(me(), id, input))).then(async (u) => { await data.load(); return u; }),
+  /** Photos and documents on a record: add (base64 `data`), list, fetch one (with its data), remove. */
+  files: {
+    add: (entity, id, file) => change((mode === 'server' ? http('POST', 'files', { entity, id, ...file }) : guard(async () => local.svc.addFile(me(), { entity, id, ...file }))).then((meta) => ({ ...meta, touched: [entity] }))),
+    list: (entity, id) => (mode === 'server' ? http('GET', `files?${new URLSearchParams({ entity, id })}`) : guard(async () => local.svc.listFiles(me(), entity, id))),
+    get: (fileId) => (mode === 'server' ? http('GET', `files/${fileId}`) : guard(async () => local.svc.getFile(me(), fileId))),
+    remove: (fileId) => (mode === 'server' ? http('DELETE', `files/${fileId}`) : guard(async () => local.svc.removeFile(me(), fileId))),
+  },
   /** Say which position I hold. It waits for the head of that work centre, or an admin, to confirm. */
   pickPosition: (position, station = '') => (mode === 'server' ? http('POST', 'me/position', { position, station }) : guard(async () => local.svc.pickPosition(me(), { position, station }))).then(async (u) => { await data.load(); return u; }),
   /** Confirm (or turn down) someone's request to join. */

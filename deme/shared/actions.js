@@ -150,6 +150,9 @@ export const ACTIONS = {
       const supplier = ctx.get('suppliers', doc.supplier) || ctx.fail('This receipt has no supplier. Choose the supplier, then post again.');
       const lines = doc.lines || [];
       if (!lines.length) ctx.fail('This receipt has no lines. Add what arrived, then post again.');
+      // Ready-for-dyeing fabric is usually delivered by the mill straight to the dye house.
+      const toDyer = doc.deliveredTo === 'dyer';
+      const dyer = toDyer ? ctx.get('suppliers', doc.dyer) || ctx.fail('Choose which dye house the mill delivered to, then post again.') : null;
       const byLedger = {};
       let total = 0, rolls = 0, stocked = 0;
       lines.forEach((line, i) => {
@@ -159,7 +162,7 @@ export const ACTIONS = {
           const n = Math.max(1, Math.round(line.rolls || 1));
           if (n > 500) ctx.fail(`Line ${i + 1} (${item.name}) says ${qty(n)} rolls. Check the number of rolls; one line takes up to 500.`);
           const metres = round(line.qty / n, 1);
-          for (let r = 0; r < n; r++) ctx.put('rolls', { item: item.id, supplier: doc.supplier, metres, grn: doc.id, receivedOn: doc.date || ctx.today, location: 'Dock' });
+          for (let r = 0; r < n; r++) ctx.put('rolls', { item: item.id, supplier: doc.supplier, metres, left: metres, grn: doc.id, receivedOn: doc.date || ctx.today, location: dyer ? `At ${dyer.name}` : 'Dock', heldAt: dyer?.id });
           rolls += n;
         } else {
           ctx.move(item.id, line.qty, 'receipt', doc.no);
@@ -188,7 +191,7 @@ export const ACTIONS = {
       ctx.setStatus('goods_receipts', doc, 'posted');
 
       const parts = [];
-      if (rolls) parts.push(`${count(rolls, 'roll is', 'rolls are')} waiting for inspection`);
+      if (rolls) parts.push(`${count(rolls, 'roll is', 'rolls are')} ${dyer ? `at ${dyer.name}, to be checked there${doc.millReport === 'ok' ? ' or accepted on the mill\'s report' : ''}` : 'waiting for inspection'}`);
       if (stocked) parts.push(`${count(stocked, 'material is', 'materials are')} added to stock`);
       if (bill) parts.push(`a bill of ${rupees(total)} is open`);
       return { message: `Receipt ${doc.no} is posted: ${parts.join(', ')}.` };
@@ -197,11 +200,12 @@ export const ACTIONS = {
 
   // ── Inventory ──
   'roll.inspect': {
-    run(ctx, { points, defects = '' }, doc) {
+    run(ctx, { points, defects = '', reason }, doc) {
       if (!(points >= 0)) ctx.fail('Enter the penalty points as zero or more.');
       const pass = points <= INSPECTION_PASS_MARK;
       ctx.put('inspections', { date: ctx.today, roll: doc.id, points, result: pass ? 'pass' : 'fail', defects, inspector: ctx.user.id });
-      doc.points = points; doc.defects = defects;
+      doc.points = points; doc.defects = defects; doc.checkedBy = doc.heldAt ? 'dyehouse' : 'store';
+      if (!pass && reason) doc.reason = reason;
       if (pass) {
         ctx.setStatus('rolls', doc, 'passed');
         return { message: `Roll ${doc.no} passed inspection with ${qty(points)} points.` };
@@ -212,15 +216,16 @@ export const ACTIONS = {
       if (supplier) {
         const item = ctx.get('items', doc.item);
         const amount = round((doc.metres || 0) * (item?.cost || 0));
-        const note = ctx.voucher({ type: 'Debit Note', party: supplier.name, dr: ctx.ledgerOf('suppliers', supplier.id), cr: 'Purchase Returns', amount, narration: `Roll ${doc.no} failed inspection at ${qty(points)} points: ${qty(doc.metres)} m of ${item?.name || 'fabric'}`, ref: doc.no });
-        if (note) {
-          claim = ` A debit note of ${rupees(amount)} is raised on ${supplier.name}.`;
+        // The mill answers for it: a claim stays open until the credit note or the replacement arrives.
+        const opened = openClaim(ctx, { supplier: supplier.id, against: 'mill', stage: 'before', rolls: [doc], reason, metres: doc.metres || 0, amount, note: defects });
+        if (opened && amount > 0) {
+          claim = ` Claim ${opened.no} for ${rupees(amount)} is open on ${supplier.name}.`;
           const grn = doc.grn ? ctx.get('goods_receipts', doc.grn) : null;
           const bill = grn && ctx.all('bills').find((b) => b.ref === grn.no && ['unpaid', 'part_paid'].includes(b.status));
           if (bill) {
             bill.amount = Math.max(bill.paid || 0, round(bill.amount - amount));
             // Nothing left to pay once the claim covers the rest of the bill.
-            if (bill.amount <= (bill.paid || 0)) ctx.setStatus('bills', bill, 'paid', `Bill ${bill.no}: nothing left to pay after the debit note for roll ${doc.no}`);
+            if (bill.amount <= (bill.paid || 0)) ctx.setStatus('bills', bill, 'paid', `Bill ${bill.no}: nothing left to pay after the claim for roll ${doc.no}`);
             else ctx.put('bills', bill);
           }
         }
@@ -232,7 +237,7 @@ export const ACTIONS = {
   'roll.issue': {
     run(ctx, { workOrder }, doc) {
       const wo = ctx.get('work_orders', workOrder) || ctx.fail('Choose the work order this roll is for.');
-      doc.reservedFor = wo.id;
+      doc.reservedFor = wo.id; doc.left = 0;
       ctx.setStatus('rolls', doc, 'issued');
       return { message: `Roll ${doc.no} is issued to cutting for ${wo.no}.` };
     },
@@ -275,6 +280,9 @@ export const ACTIONS = {
     run(ctx, payload, doc) {
       const failed = [...new Set(Array.isArray(payload.failed) ? payload.failed : [])];
       const note = payload.note || '';
+      // Whose fault a failure is decides where the cost goes: the mill, the dye house, or Deme.
+      const fault = ['mill', 'dyer'].includes(payload.fault) ? payload.fault : 'none';
+      const bad = [];
       for (const id of failed) if (!(doc.rolls || []).includes(id)) ctx.fail(`Roll ${ctx.title('rolls', id) || id} is not on this dye lot. Choose the failed rolls from this lot only.`);
       let accepted = 0, lost = 0, item = null;
       for (const id of doc.rolls || []) {
@@ -282,12 +290,14 @@ export const ACTIONS = {
         if (!roll) continue;
         item ||= ctx.get('items', roll.item);
         if (failed.includes(id)) {
-          lost += roll.metres || 0;
+          lost += roll.metres || 0; bad.push(roll);
           if (note) roll.defects = note;
-          ctx.setStatus('rolls', roll, 'dye_reject');
+          if (payload.reason) roll.reason = payload.reason;
+          // A fabric fault goes back to the mill like any rejected roll.
+          ctx.setStatus('rolls', roll, fault === 'mill' ? 'rejected' : 'dye_reject');
         } else {
           accepted += roll.metres || 0;
-          roll.location = 'Fabric store';
+          roll.location = 'Fabric store'; delete roll.heldAt;
           ctx.setStatus('rolls', roll, 'dyed');
         }
       }
@@ -300,11 +310,17 @@ export const ACTIONS = {
         ctx.voucher({ type: 'Purchase', party: dyer, dr: 'Dyeing Charges', cr: ctx.ledgerOf('suppliers', doc.dyer), amount: charge, narration: `Dyeing ${qty(accepted)} m of ${item.name} in ${doc.shade}, lot ${doc.no}`, ref: doc.no });
         ctx.bill(doc.dyer, doc.no, charge);
       }
-      if (failed.length) {
+      let claimed = '';
+      if (failed.length && fault !== 'none') {
+        const on = fault === 'mill' ? bad[0]?.supplier : doc.dyer;
+        const opened = openClaim(ctx, { supplier: on, against: fault, stage: 'after', rolls: bad, dyeLot: doc.id, reason: payload.reason, metres: lost, amount: round(lost * (item?.cost || 0)), note });
+        if (opened) claimed = ` Claim ${opened.no} is open on ${ctx.title('suppliers', on)}.`;
+      }
+      if (failed.length && !claimed) {
         ctx.voucher({ type: 'Journal', party: dyer, dr: 'Fabric Loss: Post-Dye Defects', cr: 'Stock: Dyed Fabric', amount: lost * ((item?.cost || 0) + dyeCost), narration: `${qty(lost)} m failed after dyeing, lot ${doc.no}${note ? `: ${note}` : ''}`, ref: doc.no });
       }
       ctx.setStatus('dye_lots', doc, 'received');
-      return { message: `Dye lot ${doc.no} is received: ${qty(accepted)} m accepted${failed.length ? `, ${qty(lost)} m failed` : ''}.${charge > 0 ? ` ${dyer} is billed ${rupees(charge)}.` : ''}` };
+      return { message: `Dye lot ${doc.no} is received: ${qty(accepted)} m accepted${failed.length ? `, ${qty(lost)} m failed` : ''}.${charge > 0 ? ` ${dyer} is billed ${rupees(charge)}.` : ''}${claimed}` };
     },
   },
 
@@ -371,7 +387,7 @@ export const ACTIONS = {
       const lines = doc.lines || [];
       if (!lines.length) ctx.fail('This sales order has no lines. Add the styles and quantities, then confirm.');
       lines.forEach((l, i) => { if (!ctx.get('styles', l.style) || !(l.qty > 0)) ctx.fail(`Line ${i + 1} needs a style and a quantity above zero.`); });
-      const raised = lines.map((l) => ctx.put('work_orders', { channel: 'B2B', customer: doc.customer, style: l.style, qty: l.qty, due: doc.shipBy, source: doc.no }));
+      const raised = lines.map((l) => ctx.put('work_orders', { channel: 'B2B', customer: doc.customer, style: l.style, qty: l.qty, due: doc.shipBy, source: doc.no, madeBy: l.vendor ? 'vendor' : 'inhouse', vendor: l.vendor || undefined }));
       ctx.setStatus('sales_orders', doc, 'confirmed');
       return { message: `Sales order ${doc.no} is confirmed. ${count(raised.length, 'work order is', 'work orders are')} raised: ${raised.map((w) => w.no).join(', ')}.` };
     },
@@ -607,6 +623,8 @@ export const ACTIONS = {
       const note = String(payload.note ?? '').trim();
       const event = (type, text) => { parcel.events = [...(parcel.events || []), { at: ctx.now, type, text }]; };
       const gate = { shopify: gateShopify, b2b: gateB2b, store: gateStore }[parcel.kind] || ctx.fail('This parcel has no kind set. Correct it in Parcels, then scan again.');
+      // Going out: nothing leaves without the office's paperwork.
+      if (parcel.status === 'packed') { const missing = papersMissing(parcel); if (missing) ctx.fail(missing); }
       const { direction, message } = gate(ctx, parcel, note, event, number(payload.workMinutes));
       return { message, data: { parcel: ctx.get('parcels', parcel.id), direction } };
     },
@@ -710,5 +728,6 @@ export const ACTIONS = {
 
 // The go-live plan and the task board steps live in their own file.
 import { GOLIVE_ACTIONS } from './golive.js';
+import { FLOOR_ACTIONS, openClaim, papersMissing } from './floor.js';
 import { COLLAB_ACTIONS } from './collab.js';
-Object.assign(ACTIONS, GOLIVE_ACTIONS, COLLAB_ACTIONS);
+Object.assign(ACTIONS, GOLIVE_ACTIONS, COLLAB_ACTIONS, FLOOR_ACTIONS);

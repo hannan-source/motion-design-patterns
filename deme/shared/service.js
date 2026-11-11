@@ -40,7 +40,7 @@ const canRead = (user, e) => (!!e.open && !!user) || modulesFor(e).some((m) => c
 const canWrite = (user, e) => !e.readonly && (can(user, e.module, e.level || 'write') || (e.alsoWrite || []).some((m) => can(user, m, 'write')));
 
 export function createService(db, { actions = {}, hash = null } = {}) {
-  const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, extra: u.extra || [], active: u.active !== false, position: u.position || '', centre: u.centre || '', station: u.station || '', pending: u.pending || null };
+  const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, extra: u.extra || [], active: u.active !== false, position: u.position || '', centre: u.centre || '', station: u.station || '', supplier: u.supplier || '', pending: u.pending || null };
   /** Emails to send once this request has been saved: [{ email, name, text, link, byName }]. The host sends them. */
   const outbox = [];
   const centres = () => db.all('work_centres');
@@ -241,6 +241,8 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       const u = await makeUser({ ...input, role: input.role || pos?.role });
       if (pos) Object.assign(u, { position: pos.id, centre: input.centre || centreByKey(pos.centre) });
       else if (input.centre) u.centre = input.centre;
+      // An outside login (a dye house) is tied to the supplier it belongs to.
+      if (input.supplier) { if (!db.get('suppliers', input.supplier)) fail('Unknown supplier.'); u.supplier = input.supplier; }
       db.tx(() => { db.put('users', u); handOver(u); db.log({ at: u.createdAt, user: user.id, userName: user.name, entity: 'users', id: u.id, action: 'created', text: `Added ${u.name} as ${pos?.name || ROLES[u.role].name}` }); });
       return publicUser(u);
     },
@@ -260,6 +262,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
         }
         if (input.centre !== undefined) { if (input.centre && !db.get('work_centres', input.centre)) fail('Unknown work centre.'); u.centre = input.centre || ''; }
         if (input.station !== undefined) u.station = input.station || '';
+        if (input.supplier !== undefined) { if (input.supplier && !db.get('suppliers', input.supplier)) fail('Unknown supplier.'); u.supplier = input.supplier || ''; }
         if (input.extra !== undefined) u.extra = (input.extra || []).filter((m) => MODULES[m]);
         if (input.active !== undefined) { if (self && !input.active) fail('You cannot switch off your own login.'); u.active = !!input.active; }
         if (input.email !== undefined) { const em = String(input.email).trim().toLowerCase(); if (db.all('users').some((x) => x.id !== id && x.email === em)) fail('That email is already in use.'); u.email = em; }
@@ -303,6 +306,46 @@ export function createService(db, { actions = {}, hash = null } = {}) {
         db.log({ at, user: user.id, userName: user.name, entity: 'users', id, action: ok ? 'confirmed' : 'declined', text: `${ok ? 'Confirmed' : 'Declined'} ${u.name} as ${pos.name}` });
       });
       return publicUser(u);
+    },
+    // ── Photos and documents on a record ──
+    // The picture itself is kept apart from its description, so listing never loads the pictures.
+    /** Attach a photo or a PDF to a record. `data` is base64. Whoever can open the record can add to it; so can the person who made it. */
+    addFile(user, { entity: entityId, id, name, type, data } = {}) {
+      const e = ent(entityId), doc = db.get(entityId, id) || fail('Not found.', 404);
+      need((canRead(user, e) && visible(user, e, doc)) || doc.createdBy === user.id, `You cannot add to this ${e.one.toLowerCase()}.`);
+      if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(String(type))) fail('Attach a photo or a PDF.');
+      if (typeof data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(data)) fail('The file did not arrive whole. Try again.');
+      if (data.length > 2.8e6) fail('That file is too large. Keep it under 2 MB.');
+      if (db.all('file_index').filter((f) => f.entity === entityId && f.ref === id).length >= 12) fail('This record already has 12 files.');
+      const at = new Date().toISOString(), meta = { id: newId(), entity: entityId, ref: id, name: String(name || 'photo').slice(0, 120), type, size: Math.round(data.length * 0.75), by: user.id, byName: user.name, at };
+      db.tx(() => {
+        db.put('file_index', meta); db.put('files', { id: meta.id, data });
+        if (fieldsOf(e).some((f) => f.k === 'photos')) { doc.photos = (doc.photos || 0) + 1; db.put(entityId, doc); }
+        db.log({ at, user: user.id, userName: user.name, entity: entityId, id, action: 'file', text: `Attached ${meta.name} to ${e.one.toLowerCase()} ${titleOf(e, doc)}` });
+      });
+      return meta;
+    },
+    listFiles(user, entityId, id) {
+      const e = ent(entityId), doc = db.get(entityId, id) || fail('Not found.', 404);
+      need((canRead(user, e) && visible(user, e, doc)) || doc.createdBy === user.id);
+      return db.all('file_index').filter((f) => f.entity === entityId && f.ref === id).sort((a, b) => (a.at < b.at ? -1 : 1));
+    },
+    getFile(user, fileId) {
+      const meta = db.get('file_index', fileId) || fail('Not found.', 404);
+      const e = ent(meta.entity), doc = db.get(meta.entity, meta.ref);
+      need(meta.by === user.id || (doc && canRead(user, e) && visible(user, e, doc)));
+      return { ...meta, data: db.get('files', fileId)?.data || '' };
+    },
+    removeFile(user, fileId) {
+      const meta = db.get('file_index', fileId) || fail('Not found.', 404);
+      const e = ent(meta.entity);
+      need(meta.by === user.id || can(user, e.module, 'admin'), 'Only whoever attached it, or a module admin, can remove a file.');
+      db.tx(() => {
+        db.del('file_index', fileId); db.del('files', fileId);
+        const doc = db.get(meta.entity, meta.ref);
+        if (doc && fieldsOf(e).some((f) => f.k === 'photos')) { doc.photos = Math.max(0, (doc.photos || 0) - 1); db.put(meta.entity, doc); }
+      });
+      return { ok: true };
     },
     /** A person's own notifications, newest first. */
     inbox: (user) => db.all('notifications').filter((n) => n.to === user.id).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 60),

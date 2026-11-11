@@ -59,7 +59,7 @@ test('someone new picks a position; it counts only once the head of that work ce
   // a position with wide access is for an admin to confirm, not a head
   const meena = svc.externalUser({ email: 'meena@deme.test', name: 'Meena' }, { autoJoin: true });
   svc.pickPosition(meena, { position: 'finance' });
-  assert.ok(inbox(admin).includes('Meena asks to join as Finance'));
+  assert.ok(inbox(admin).includes('Meena asks to join as Finance head'));
   assert.throws(() => svc.decideJoin(jason, meena.id, true), /Only an admin/);
   svc.decideJoin(admin, meena.id, true);
   assert.equal(fresh(meena.id).role, 'finance');

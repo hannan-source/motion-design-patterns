@@ -60,7 +60,8 @@ test('fabric inspection: a pass, and a fail that claims the money back', () => {
   assert.equal(act('roll.inspect', 'rolls', b.id, { points: 40 }).doc.status, 'passed'); // the pass mark itself passes
   const failed = act('roll.inspect', 'rolls', c.id, { points: 55, defects: 'Weft bars' });
   assert.equal(failed.doc.status, 'rejected');
-  assert.match(failed.message, /debit note of ₹5,000/);
+  assert.match(failed.message, /Claim CLM-00001 for ₹5,000 is open on Sita Mills/);
+  assert.deepEqual(list('claims').map((c) => [c.against, c.stage, c.metres > 0, c.amount, c.status]), [['mill', 'before', true, 5000, 'open']]);
   assert.deepEqual(vouchers({ type: 'Debit Note' }).map((v) => [v.dr, v.cr, v.amount]), [['Sita Mills', 'Purchase Returns', 5000]]);
   assert.equal(get('bills', s.millBill.id).amount, 12000);
   assert.deepEqual(list('inspections').map((i) => i.result).sort(), ['fail', 'pass', 'pass']);
@@ -139,6 +140,11 @@ test('Shopify parcel: packed, out through the gate, and back as a return', () =>
   refused(() => act('shop.pack', 'shop_orders', second.id, { awb: 'awb111' }), /already exists/);
   refused(() => scan('gate.scan', { barcode: 'NOPE' }), /^No parcel has this barcode\. Pack the order first, or check the label\.$/);
 
+  // nothing leaves without the office's paperwork; above ₹50,000 that includes an e-way bill
+  refused(() => scan('gate.scan', { barcode: 'AWB111' }), /has no e-invoice number yet/);
+  const parcel = list('parcels').find((p) => p.barcode === 'AWB111');
+  refused(() => act('parcel.papers', 'parcels', parcel.id, { invoiceNo: 'INV-1', value: 60000 }), /needs an e-way bill number/);
+  act('parcel.papers', 'parcels', parcel.id, { invoiceNo: 'INV-1', value: 8400 });
   const out = scan('gate.scan', { barcode: ' awb111 ' });
   assert.deepEqual([out.data.direction, out.data.parcel.status, out.data.parcel.events.map((e) => e.type)], ['out', 'in_transit', ['pack', 'out']]);
   assert.equal(get('shop_orders', order.id).status, 'shipped');

@@ -218,6 +218,13 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
         if (parts[0] === 'boot') return json(200, { user: svc.publicUser(user), readable: svc.readable(user), writable: svc.writable(user), users: svc.listUsers(user), mine: svc.mine(user) });
         // A cheap question an open page asks every so often: has anything happened since I last looked?
         if (parts[0] === 'tick' && m === 'GET') return json(200, { seq: db.logs({ limit: 1 })[0]?.seq || 0, notice: svc.inbox(user)[0]?.id || '' });
+        // Photos and documents on a record. The picture travels as base64 inside JSON, both ways.
+        if (parts[0] === 'files') {
+          if (m === 'POST') return json(200, svc.addFile(user, body));
+          if (m === 'GET' && !parts[1]) return json(200, svc.listFiles(user, req.query.get('entity'), req.query.get('id')));
+          if (m === 'GET') return json(200, svc.getFile(user, parts[1]));
+          if (m === 'DELETE' && parts[1]) return json(200, svc.removeFile(user, parts[1]));
+        }
         if (parts[0] === 'me' && parts[1] === 'position' && m === 'POST') return json(200, svc.pickPosition(user, body));
         if (parts[0] === 'inbox') {
           if (m === 'GET') return json(200, svc.inbox(user));
