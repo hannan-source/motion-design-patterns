@@ -533,7 +533,7 @@ export const TOURS = [
       { route: 'journey', target: '.journey .jn-progress', alt: '.journey .jn-me', title: 'How far you are', text: 'Your own steps of the go-live, done out of the total.' },
       { route: 'journey', target: '.journey .jn-now', alt: '.journey .jn-me', title: 'Do this now', text: 'The next step, the screen it is done on, and Show me how. Mark it done when it meets the test written on it.' },
       { route: 'journey', target: '.rail .bell', alt: '.topbar .bell', title: 'Notices', text: 'A task given to you, a request to your work centre, a comment or something you were waiting for shows up here, and in your email.' },
-      { route: 'm-projects', target: '.tracker [data-ask]', alt: '.tracker', title: 'Ask another work centre', text: 'Need something from another team? Ask here. It goes to the person in charge, and you hear when it is done.' },
+      { route: 'm-projects', target: '#tkAsk', alt: '.tracker', title: 'Ask another work centre', text: 'Need something from another team? Ask here. It goes to the person in charge, and you hear when it is done.' },
       { route: 'org', target: '.org .og-grid', title: 'Who is who', text: 'Every work centre, who runs it, its workstations and its people.' },
     ],
   },

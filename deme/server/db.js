@@ -38,7 +38,7 @@ export function openDb(file) {
       const where = [], args = [];
       if (entity) { where.push('entity = ?'); args.push(entity); }
       if (id) { where.push('id = ?'); args.push(id); }
-      return sql.prepare(`SELECT at, user, userName, entity, id, action, text FROM logs ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY seq DESC LIMIT ?`).all(...args, Math.min(1000, limit));
+      return sql.prepare(`SELECT seq, at, user, userName, entity, id, action, text FROM logs ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY seq DESC LIMIT ?`).all(...args, Math.min(1000, limit));
     },
     logsAfter: (seq, limit = 200) => sql.prepare('SELECT seq, at, user, userName, entity, id, action, text FROM logs WHERE seq > ? ORDER BY seq ASC LIMIT ?').all(seq, limit),
     /** All-or-nothing: if anything inside throws, nothing is saved. */

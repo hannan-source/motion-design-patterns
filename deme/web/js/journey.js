@@ -140,7 +140,7 @@ export function mount(el, ctx) {
       ${team.length ? `<section class="panel" aria-labelledby="jnTeamH"><div class="panel-head"><div class="title-row"><h2 id="jnTeamH">Your team</h2>${info('The people in the work centres you are in charge of, and how far each is through their own steps.', 'Your team')}</div></div><ul class="jn-team">${team.map(({ u, n, d, late: l }) => `<li>${av(u.id, 34)}<div><strong>${esc(u.name)}</strong><span class="faint">${esc(positionById[u.position]?.name || '')}</span></div><div class="jn-team-bar"><div class="bar" style="--v:${n ? Math.round((d / n) * 100) : 0}%"><i></i></div><span class="faint">${n ? `${d} of ${n}` : 'No steps'}${l ? ` · <b class="is-late">${l} late</b>` : ''}</span></div></li>`).join('')}</ul></section>` : ''}
       ${tours.length ? `<section class="panel" aria-labelledby="jnLearnH"><div class="panel-head"><div class="title-row"><h2 id="jnLearnH">Learn your screens</h2></div><button class="link" type="button" data-go="guide">All walkthroughs</button></div><div class="jn-tours">${tours.map((t) => `<button type="button" class="jn-tour" data-tour="${t.id}"><span class="jn-play" aria-hidden="true"></span><strong>${esc(t.title)}</strong><span class="faint">${t.minutes} min</span></button>`).join('')}</div></section>` : ''}
       ${done ? `<section class="panel" aria-labelledby="jnDoneH"><details class="jn-done"><summary><h2 id="jnDoneH">Done</h2><span class="tag tag-ok">${done}</span></summary><ul class="jn-path">${plan.filter((t) => t.status === 'done').map((t) => stopHtml(t, T, pos?.guide, false)).join('')}</ul></details></section>` : ''}
-      <div class="row jn-ask"><button class="btn btn-outline" type="button" data-go="m-projects">Ask a work centre for something</button><button class="btn btn-quiet" type="button" data-go="org">Who is who</button></div>`;
+      <div class="row jn-ask"><button class="btn btn-outline" type="button" data-ask>Ask a work centre for something</button><button class="btn btn-quiet" type="button" data-go="org">Who is who</button></div>`;
   }
 
   function render() {
@@ -157,6 +157,7 @@ export function mount(el, ctx) {
     if (b.dataset.pick) { picking = picking === b.dataset.pick ? null : b.dataset.pick; render(); root.querySelector('#jnAsk')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
     if (b.dataset.repick !== undefined) { data.user = { ...data.user, pending: null, position: '' }; picking = null; render(); return; }
     if (b.dataset.go) return ctx.go(b.dataset.go);
+    if (b.dataset.ask !== undefined) return ctx.go('m-projects', { ask: true });
     if (b.dataset.task) { location.hash = `task-${b.dataset.task}`; return; }
     if (b.dataset.tour) return void import('./guide.js').then((g) => g.startTour(b.dataset.tour, 'watch', ctx)).catch(oops);
     if (b.dataset.join) return void busy(b, async () => { try { const u = await api.decideJoin(b.dataset.join, b.dataset.ok === '1'); toast(b.dataset.ok === '1' ? `${u.name} is in.` : `${u.name} can pick again.`); } catch (x) { oops(x); } });

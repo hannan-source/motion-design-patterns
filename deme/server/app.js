@@ -193,7 +193,7 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
       if (parts[0] === 'all' && m === 'GET') {
         const who = (db) => { const svc = createService(db, { actions: ACTIONS, hash: hashPassword }); const u = whoIs(db, svc, req); if (!u) throw new UserError('Sign in to continue.', 401); return { svc, u }; };
         const names = await store.run((db) => { const { svc, u } = who(db); return svc.readable(u); });
-        return await store.run((db) => { const { svc, u } = who(db); return json(200, { user: svc.publicUser(u), readable: svc.readable(u), writable: svc.writable(u), users: svc.listUsers(u), mine: svc.mine(u), data: Object.fromEntries(svc.readable(u).map((e) => [e, svc.list(u, e)])) }); }, { preload: [...names, 'users', 'api_keys'] });
+        return await store.run((db) => { const { svc, u } = who(db); return json(200, { seq: db.logs({ limit: 1 })[0]?.seq || 0, user: svc.publicUser(u), readable: svc.readable(u), writable: svc.writable(u), users: svc.listUsers(u), mine: svc.mine(u), data: Object.fromEntries(svc.readable(u).map((e) => [e, svc.list(u, e)])) }); }, { preload: [...names, 'users', 'api_keys'] });
       }
 
       const res = await store.run(async (db) => {
@@ -216,6 +216,8 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
         if (!user) throw new UserError('Sign in to continue.', 401);
 
         if (parts[0] === 'boot') return json(200, { user: svc.publicUser(user), readable: svc.readable(user), writable: svc.writable(user), users: svc.listUsers(user), mine: svc.mine(user) });
+        // A cheap question an open page asks every so often: has anything happened since I last looked?
+        if (parts[0] === 'tick' && m === 'GET') return json(200, { seq: db.logs({ limit: 1 })[0]?.seq || 0, notice: svc.inbox(user)[0]?.id || '' });
         if (parts[0] === 'me' && parts[1] === 'position' && m === 'POST') return json(200, svc.pickPosition(user, body));
         if (parts[0] === 'inbox') {
           if (m === 'GET') return json(200, svc.inbox(user));

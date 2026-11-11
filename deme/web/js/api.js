@@ -130,7 +130,7 @@ export const data = {
   async load() {
     if (mode === 'server') {   // one request for everything this person may read
       const b = await http('GET', 'all');
-      Object.assign(data, { user: b.user, users: b.users, mine: b.mine, inbox: b.mine?.inbox || [], readable: new Set(b.readable), writable: new Set(b.writable), cache: b.data });
+      Object.assign(data, { seq: b.seq, user: b.user, users: b.users, mine: b.mine, inbox: b.mine?.inbox || [], readable: new Set(b.readable), writable: new Set(b.writable), cache: b.data });
     } else {
       const b = await api.boot();
       Object.assign(data, { user: b.user, users: b.users, mine: b.mine, inbox: b.mine?.inbox || [], readable: new Set(b.readable), writable: new Set(b.writable) });
@@ -147,8 +147,22 @@ export const data = {
     if (mineToo) { const b = await api.boot(); Object.assign(data, { mine: b.mine, inbox: b.mine?.inbox || [], users: b.users, user: b.user, writable: new Set(b.writable) }); }
     if (touched.length) emit(touched);
   },
-  /** Look for new notices, and for tasks and comments others have changed. Called on a timer while the app is open. */
-  async poll() { if (!data.ready) return; const before = data.inbox[0]?.id; data.inbox = await api.inbox(); if (data.inbox[0]?.id !== before) { await data.refresh(['tasks', 'comments', 'projects'].filter((e) => data.readable.has(e))); emit(['notifications']); } },
+  /**
+   * Called on a timer while the app is open: has anyone changed anything since this page last
+   * loaded? If so, load it again, so what one person enters shows on everyone else's screen
+   * without a refresh. While this person is typing, only tasks and comments are refreshed, and
+   * the rest waits until they stop, so nothing is redrawn under their hands.
+   */
+  async poll() {
+    if (!data.ready) return;
+    if (mode !== 'server') { const before = data.inbox[0]?.id; data.inbox = await api.inbox(); if (data.inbox[0]?.id !== before) emit(['notifications']); return; }
+    const t = await http('GET', 'tick');
+    const news = t.seq !== data.seq, notice = t.notice !== (data.inbox[0]?.id || '');
+    if (!news && !notice) return;
+    const a = document.activeElement, typing = !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+    if (news && !typing) return data.load();
+    await data.refresh([...(news ? ['tasks', 'comments', 'projects'] : []), ...(notice ? ['notifications'] : [])]);
+  },
   clear() { Object.assign(data, { user: null, users: [], mine: null, inbox: [], readable: new Set(), writable: new Set(), cache: {}, ready: false }); },
   all: (entity) => data.cache[entity] || [],
   get: (entity, id) => (data.cache[entity] || []).find((d) => d.id === id) || null,

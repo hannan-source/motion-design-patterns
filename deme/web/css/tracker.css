@@ -9,7 +9,6 @@
 .tracker [data-status="doing"] > .tk-dot { background: var(--info); }
 .tracker [data-status="blocked"] > .tk-dot { background: var(--crit); }
 .tracker [data-status="done"] > .tk-dot { background: var(--ok); }
-.tracker .tk-line { color: var(--ink-3); font-size: 15px; }
 .tracker .tk-big { min-height: 48px; padding: 0 24px; }
 .tracker .seg button { min-height: 34px; padding: 6px 11px; }
 .tracker .tk-toggle { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); font: 400 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; transition: background .2s, color .2s, border-color .2s; }
@@ -344,7 +343,7 @@
 .tracker .tk-compose textarea.input { display: block; min-height: 44px; max-height: 220px; resize: none; }
 .tracker .tk-compose .btn { min-height: 44px; }
 /* Lists that open from a field: names to mention, tasks to wait for */
-.tracker .tk-at, .tracker .tk-dep-list { position: absolute; z-index: 5; left: 0; right: 0; max-height: 228px; overflow-y: auto; padding: 4px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-2); overscroll-behavior: contain; }
+.tracker .tk-at, .tracker .tk-dep-list { position: absolute; z-index: 5; left: 0; right: 0; max-height: 252px; overflow-y: auto; padding: 4px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-2); overscroll-behavior: contain; }
 .tracker .tk-at { bottom: calc(100% + 6px); }
 .tracker .tk-dep-list { display: none; top: calc(100% + 4px); }
 .tracker .tk-dep-find { position: relative; }

@@ -51,6 +51,7 @@ const mem = { project: null, view: 'board', group: 'none', lanes: new Map(), zoo
 
 export function mount(el, ctx) {
   const canP = () => data.canWrite('projects'), canT = () => data.canWrite('tasks');
+  const canPlan = () => data.can('projects', 'admin'); // the go-live plan is the admin's to create
   let open = null;            // the drawer: { d, id, mode }
   let pend = null, drag = null, dirty = false, raf = 0, quietUntil = 0;
   let asking = null, askText = ''; // task whose card is asking why it is blocked, and what has been typed so far
@@ -161,7 +162,7 @@ export function mount(el, ctx) {
   }
   function drawPlan() {
     const host = box('tkPlan');
-    if (golive() || !canP()) { host.innerHTML = ''; host.hidden = true; return; }
+    if (golive() || !canPlan()) { host.innerHTML = ''; host.hidden = true; return; }
     if ($('#tkPlanStart', host)) return; // already drawn: leave the date being chosen alone
     const start = mem.planStart || nextMonday(), prev = planPreview(start);
     host.hidden = false;
@@ -362,7 +363,7 @@ export function mount(el, ctx) {
     const key = (cls, name) => `<span class="tk-key"><i class="${cls}"></i>${name}</span>`;
     const body = groups.map(groupHtml).join('') + looseHtml; // drawing the rows also notes where each bar sits and what it waits for
     return `
-      <div class="tk-legend" aria-label="Key">${key('tk-bar is-todo', 'To do')}${key('tk-bar is-doing', 'Doing')}${key('tk-bar is-done', 'Done')}${key('tk-bar is-blocked', 'Blocked')}${key('tk-bar is-todo is-late', 'Late')}${key('tk-bar is-todo is-waiting', 'Waiting')}${gantt.links.length ? '<span class="tk-key"><i class="tk-key-link"></i>Waits for</span>' : ''}<span class="tk-key"><span class="tk-bar-ask">${ICON.ask}</span>Ask someone</span></div>
+      <div class="tk-legend" aria-label="Key">${key('tk-bar is-todo', 'To do')}${key('tk-bar is-doing', 'Doing')}${key('tk-bar is-done', 'Done')}${key('tk-bar is-blocked', 'Blocked')}${key('tk-bar is-todo is-late', 'Late')}${key('tk-bar is-todo is-waiting', 'Waiting')}${gantt.links.some((l) => gantt.pos.has(l.from)) ? '<span class="tk-key"><i class="tk-key-link"></i>Waits for</span>' : ''}<span class="tk-key"><span class="tk-bar-ask">${ICON.ask}</span>Ask someone</span></div>
       <div class="tk-g${mem.zoom === 'days' ? ' is-days' : ''}" id="tkGantt" tabindex="0" role="group" aria-label="Timeline" style="--dw:${dw}px;--days:${days};--lw:${lw}px;--t:${t0}">
         <div class="tk-g-in">
           <div class="tk-g-head"><div class="tk-g-corner"><span class="eyebrow">Task</span></div><div class="tk-g-axis" aria-hidden="true"><div class="tk-g-months">${months}${month(from, days)}</div>${weeks}${dayCells}<span class="tk-g-now">Today</span></div></div>
@@ -407,7 +408,7 @@ export function mount(el, ctx) {
   function drawMain(all, T) {
     const host = box('tkMain');
     let html = '', mode = '';
-    if (!data.all('projects').length) html = canP() ? '' : '<p class="tk-line">No projects yet.</p>';
+    if (!data.all('projects').length) html = canPlan() ? '' : `<div class="panel empty"><h3>No projects yet</h3>${canP() ? '<button class="btn btn-primary" type="button" data-new-project>New project</button>' : ''}</div>`;
     else if (!all.length) html = `<div class="panel empty"><h3>No tasks yet</h3>${canT() ? '<button class="btn btn-primary" type="button" data-add>Add task</button>' : ''}</div>`;
     else {
       const shown = all.filter((t) => passes(t, T) || asking === t.id);
@@ -440,7 +441,8 @@ export function mount(el, ctx) {
     said = null;
     if (asking && !all.some((t) => t.id === asking)) asking = null;
     drawProjects(); drawPlan(); drawSummary(all, T); drawControls(all); drawMain(all, T);
-    if (fid && document.activeElement?.id !== fid) { const n = $(`#${CSS.escape(fid)}`, root); if (n) { n.focus({ preventScroll: true }); if (sel) try { n.setSelectionRange(sel[0], sel[1]); } catch { /* not a text box */ } } }
+    const n = fid ? $(`#${CSS.escape(fid)}`, root) : null;
+    if (n && n !== a) { if (document.activeElement !== n) n.focus({ preventScroll: true }); if (sel) try { n.setSelectionRange(sel[0], sel[1]); } catch { /* not a text box */ } } // redrawn under the cursor: put the cursor back
     refreshDrawer();
   }
   const redrawMain = () => drawMain(scope(), iso(today()));
@@ -752,12 +754,13 @@ export function mount(el, ctx) {
       say.focus(); say.setSelectionRange(pos, pos); atClose(); keep();
     };
     const send = () => {
-      const text = say.value.trim();
+      const sent = say.value, text = sent.trim();
       if (!text) return say.focus();
       atClose();
       busy($('#tkdCompose [type="submit"]', d.el), async () => {
         await api.act('task.comment', { id, text });
-        if (say.value.trim() === text) { say.value = ''; keep(); } // anything typed while it was sending stays
+        say.value = say.value.startsWith(sent) ? say.value.slice(sent.length).trimStart() : say.value.trim() === text ? '' : say.value; // anything typed while it was sending stays
+        keep();
         $('#tkdThread', d.el)?.lastElementChild?.scrollIntoView({ block: 'nearest' });
       });
     };
@@ -957,7 +960,7 @@ export function mount(el, ctx) {
     const t = e.target, hit = (sel) => { const n = t.closest(sel); return n && root.contains(n) ? n : null; };
     let b;
     if ((b = hit('[data-project]'))) { mem.project = b.dataset.project; mem.allDone = false; asking = null; render(); }
-    else if (hit('#tkNewProject')) projectForm();
+    else if (hit('#tkNewProject, [data-new-project]')) projectForm();
     else if (hit('#tkAsk')) askForm();
     else if ((b = hit('#tkPlanCreate'))) busy(b, async () => { const out = await api.act('golive.create', { start: $('#tkPlanStart', root).value }); mem.project = out.data?.project || golive()?.id || 'all'; toast(out.message || 'Go-live plan created.'); render(); });
     else if ((b = hit('[data-trackf]'))) { mem.track = mem.track === b.dataset.trackf ? '' : b.dataset.trackf; render(); }
@@ -1037,6 +1040,7 @@ export function mount(el, ctx) {
 
   render();
   if (first) openTask(first);
+  if (o.ask) root.querySelector('#tkAsk')?.click();   // "Ask a work centre" pressed on another screen
   // Others change tasks and comment while this is open. Notices alone change nothing drawn here.
   const off = data.on((touched = ['*']) => { said = null; if (touched.length && touched.every((x) => x === 'notifications')) return; render(); });
   return () => {
