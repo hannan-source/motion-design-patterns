@@ -140,3 +140,15 @@ test('notices are emailed once the request is saved, when email is switched on',
   assert.match(sent[0].body.text, /https:\/\/deme\.test\/#task-/);
   assert.ok((await call('GET', '/api/inbox', null, 'deme_sid=tok')).json.length >= 1);
 });
+
+test('only an admin creates the go-live plan; a team member cannot', () => {
+  const db2 = memoryDb(); const s2 = createService(db2, { actions: ACTIONS, hash: async (p) => `h:${p}` });
+  return s2.setup({ name: 'A', email: 'a@deme.test', password: 'correct-horse' }).then(async (a) => {
+    const staff = s2.externalUser({ email: 'x@deme.test', name: 'X' }, { autoJoin: true });
+    assert.throws(() => s2.act(staff, 'golive.create', { payload: {} }), /cannot do this/);
+    assert.equal(s2.act(s2.getUser(a.id), 'golive.create', { payload: { start: '2026-11-16' } }).data.project.length > 0, true);
+    // a team member with no position can still raise a task and see the work centres
+    assert.ok(s2.list(staff, 'work_centres').length > 0);
+    assert.ok(s2.act(staff, 'task.ask', { payload: { centre: s2.list(staff, 'work_centres')[0].id, title: 'Where do I sit?' } }).data.task);
+  });
+});

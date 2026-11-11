@@ -85,7 +85,7 @@ const stepTo = (status, verb) => ({ run(ctx, _p, doc) { ctx.setStatus('tasks', d
 export const GOLIVE_ACTIONS = {
   /** Build the go-live project and its dated tasks from the template. */
   'golive.create': {
-    module: 'projects', level: 'write',
+    module: 'projects', level: 'admin',   // the plan is the admin's to create; everyone then works their own part of it
     run(ctx, { start }) {
       if (ctx.all('projects').some((p) => p.kind === 'golive')) ctx.fail('The go-live plan already exists. Open it under Projects.');
       const from = start && /^\d{4}-\d{2}-\d{2}$/.test(start) ? new Date(`${start}T00:00:00`) : new Date(`${ctx.today}T00:00:00`);
