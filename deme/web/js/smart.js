@@ -12,17 +12,27 @@ const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const importable = () => ENTITIES.filter((e) => !e.readonly && data.canWrite(e.id));
 const fieldsFor = (e) => fieldsOf(e).filter((f) => !f.ro && f.type !== 'lines');
 
-/** Match columns to fields by name alone. Used when AI mapping is off, and as the starting point when a type is picked by hand. */
-function byName(headers, entity) {
-  const fs = fieldsFor(entity), used = new Set();
-  return headers.map((h) => {
-    const n = norm(h);
-    const hit = fs.find((f) => !used.has(f.k) && (norm(f.label) === n || norm(f.k) === n)) || fs.find((f) => !used.has(f.k) && n.length > 2 && (norm(f.label).includes(n) || n.includes(norm(f.label))));
-    if (hit) used.add(hit.k);
-    return { header: h, field: hit ? hit.k : '', dateFormat: '' };
+/**
+ * Match columns to fields without AI: by heading first, then by two things a heading can hide.
+ * A column headed with the record's own name ("Supplier", "Style name") is its title, and a column
+ * whose every value is one of a field's choices ("Fabric mill", "Dye house") is that field.
+ */
+function byName(headers, entity, rows = []) {
+  const fs = fieldsFor(entity), used = new Set(), one = norm(entity.one || '');
+  const cols = headers.map((h) => ({ header: h, field: '', dateFormat: '' }));
+  const pass = (find) => { for (const c of cols) { if (c.field) continue; const f = find(norm(c.header), c); if (f && !used.has(f.k)) { c.field = f.k; used.add(f.k); } } };
+  const free = (test) => fs.find((f) => !used.has(f.k) && test(f));
+  pass((n) => free((f) => norm(f.label) === n || norm(f.k) === n));
+  pass((n) => (one && (n === one || n === `${one} name` || n === `name of ${one}`) ? free((f) => f.k === entity.title) : null));
+  pass((n) => (n.length > 2 ? free((f) => norm(f.label).includes(n) || n.includes(norm(f.label))) : null));
+  pass((n, c) => {
+    const values = [...new Set(rows.slice(0, 60).map((r) => norm(r[c.header] ?? '')).filter(Boolean))];
+    return values.length ? free((f) => f.type === 'select' && values.every((v) => (f.options || []).some((o) => norm(o[0]) === v || norm(o[1]) === v))) : null;
   });
+  return cols;
 }
-const bestType = (headers) => importable().map((e) => [e, byName(headers, e).filter((c) => c.field).length]).sort((a, b) => b[1] - a[1])[0]?.[0];
+const names = (headers, e) => headers.some((h) => norm(h).split(' ').includes(norm(e.one || '\u0000')));
+const bestType = (headers, rows) => importable().map((e) => [e, byName(headers, e, rows).filter((c) => c.field).length + (names(headers, e) ? 1.5 : 0)]).sort((a, b) => b[1] - a[1])[0]?.[0];
 /** 03/31/2026 → 2026-03-31. Day-first and year-first dates are understood by the server as they are. */
 const fromMDY = (v) => { const m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/.exec(String(v).trim()); return m ? `${m[3].length === 2 ? `20${m[3]}` : m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}` : v; };
 
@@ -63,8 +73,8 @@ export function mount(el, ctx) {
     result = null; note = '';
     if (api.caps.ai) {
       try { const out = await api.aiMap({ entity: picked || undefined, headers, sample: rows.slice(0, 5) }); entity = entityById[out.entity]; columns = out.columns; note = out.note; by = 'ai'; }
-      catch (err) { toast(err.message, 'crit'); entity = picked ? entityById[picked] : bestType(headers); columns = byName(headers, entity); by = 'name'; }
-    } else { entity = picked ? entityById[picked] : bestType(headers); columns = byName(headers, entity); by = 'name'; }
+      catch (err) { toast(err.message, 'crit'); entity = picked ? entityById[picked] : bestType(headers, rows); columns = byName(headers, entity, rows); by = 'name'; }
+    } else { entity = picked ? entityById[picked] : bestType(headers, rows); columns = byName(headers, entity, rows); by = 'name'; }
     if (!entity) return toast('Your role cannot add records, so there is nothing to import into.', 'crit');
     renderMap(); step2.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }));
@@ -92,7 +102,7 @@ export function mount(el, ctx) {
   }
   step2.addEventListener('change', (e) => {
     const t = e.target;
-    if (t.id === 'siInto') { entity = entityById[t.value]; columns = byName(headers, entity); by = 'name'; note = ''; result = null; renderMap(); }
+    if (t.id === 'siInto') { entity = entityById[t.value]; columns = byName(headers, entity, rows); by = 'name'; note = ''; result = null; renderMap(); }
     else if (t.dataset.col !== undefined) { columns[+t.dataset.col].field = t.value; renderMap(); }
     else if (t.dataset.date !== undefined) columns[+t.dataset.date].dateFormat = t.value;
   });
