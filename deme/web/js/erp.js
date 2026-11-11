@@ -5,6 +5,7 @@ import { api, data } from './api.js';
 import { $, $$, esc, info, toast, oops, busy, show, statusTag, formHtml, readForm, drawer, parseCsv, fields, fmtStamp, inr, num } from './ui.js';
 import { MODULES, ROLES, LEVELS, ENTITIES, entityById, fieldsOf, levelOf } from '../shared/schema.js';
 import { titleOf } from '../shared/service.js';
+import { POSITIONS, positionById } from '../shared/org.js';
 import { barcodeSvg } from '../shared/code128.js';
 
 // Record types that carry a tag Deme prints itself: what the barcode holds and the lines under it.
@@ -257,8 +258,8 @@ export function mount(el, ctx) {
     const isAdmin = data.can('admin', 'admin');
     if (current === 'team') {
       body.innerHTML = `<div class="toolbar"><div class="title-row"><h2>Team</h2>${info('Each person signs in with their own email and password. The role decides which modules they can open and whether they can add, approve or only look. "Also allow" gives one person write access to extra modules without changing their role, for example purchase orders for one marketing manager.', 'Team and access')}</div><div class="spacer"></div>${isAdmin ? '<button class="btn btn-primary" type="button" data-user="new">Add team member</button>' : ''}</div>
-        <div class="panel"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Also allowed</th><th>Login</th></tr></thead><tbody>
-        ${data.users.map((u) => `<tr ${isAdmin ? `data-user="${u.id}" tabindex="0" data-open` : ''}><td>${esc(u.name)}</td><td>${esc(u.email || '')}</td><td>${esc(ROLES[u.role]?.name || u.role)}</td><td>${esc((u.extra || []).map((m) => MODULES[m].name).join(', '))}</td><td>${u.active ? '<span class="tag tag-ok">Active</span>' : '<span class="tag tag-plain">Off</span>'}</td></tr>`).join('')}
+        <div class="panel"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Also allowed</th><th>Login</th></tr></thead><tbody>
+        ${data.users.map((u) => `<tr ${isAdmin ? `data-user="${u.id}" tabindex="0" data-open` : ''}><td>${esc(u.name)}</td><td>${esc(u.email || '')}</td><td>${esc(positionById[u.position]?.name || ROLES[u.role]?.name || u.role)}${u.pending ? ' <span class="tag tag-warn">Asked to join</span>' : ''}${u.centre ? `<br><span class="faint">${esc(data.title('work_centres', u.centre))}</span>` : ''}</td><td>${esc((u.extra || []).map((m) => MODULES[m].name).join(', '))}</td><td>${u.active ? '<span class="tag tag-ok">Active</span>' : '<span class="tag tag-plain">Off</span>'}</td></tr>`).join('')}
         </tbody></table></div></div>
         ${api.mode === 'local' ? '<div class="row"><button class="btn btn-sm btn-quiet" type="button" data-reset>Erase this preview\'s data</button></div>' : ''}`;
     } else if (current === 'roles') {
@@ -316,8 +317,10 @@ export function mount(el, ctx) {
       <form class="drawer-body form-grid" novalidate>
         <div class="field"><label for="uName">Name <span class="req">*</span></label><input class="input" id="uName" value="${esc(u?.name || '')}"></div>
         <div class="field"><label for="uEmail">Work email <span class="req">*</span></label><input class="input" id="uEmail" type="email" value="${esc(u?.email || '')}"></div>
+        <div class="field"><label for="uPos">Position</label><select class="select" id="uPos"><option value="">Let them pick when they sign in</option>${POSITIONS.map((p) => `<option value="${p.id}" ${p.id === (u?.position || '') ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select><span class="hint">Sets the role and the work centre.</span></div>
+        <div class="field"><label for="uCentre">Work centre</label><select class="select" id="uCentre"><option value=""></option>${data.all('work_centres').map((c) => `<option value="${c.id}" ${c.id === (u?.centre || '') ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
         <div class="field"><label for="uRole">Role <span class="req">*</span></label><select class="select" id="uRole">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${k === (u?.role || 'staff') ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></div>
-        <div class="field"><label for="uPass">${u ? 'New password' : 'Password'} ${u ? '' : '<span class="req">*</span>'}</label><input class="input" id="uPass" type="password" autocomplete="new-password"><span class="hint">${u ? 'Leave empty to keep the current one. ' : ''}At least 8 characters. Tell them in person.</span></div>
+        <div class="field"><label for="uPass">${u ? 'New password' : 'Password'} ${u ? '' : '<span class="req">*</span>'}</label><input class="input" id="uPass" type="password" autocomplete="new-password"><span class="hint">${u ? 'Leave empty to keep the current one. ' : api.caps.google ? 'Leave empty if they sign in with Google. ' : ''}At least 8 characters. Tell them in person.</span></div>
         <div class="field wide"><span class="label">Also allow</span><div class="checks" id="uExtra">${Object.entries(MODULES).filter(([k]) => k !== 'admin').map(([k, m]) => `<label><input type="checkbox" value="${k}" ${(u?.extra || []).includes(k) ? 'checked' : ''}> ${esc(m.name)}</label>`).join('')}</div></div>
         ${u ? `<div class="field wide"><label><input type="checkbox" id="uActive" ${u.active ? 'checked' : ''}> Can sign in</label></div>` : ''}
         <p class="error wide" role="alert" hidden></p>
@@ -325,13 +328,15 @@ export function mount(el, ctx) {
       </form>`, { onClose: () => { open = null; } });
     open = { ...d, mode: 'user' };
     const form = $('form', d.el), err = $('.error', form);
+    // Choosing a position fills in the role and work centre that go with it; both can still be changed.
+    $('#uPos', form).onchange = (ev) => { const p = positionById[ev.target.value]; if (!p) return; $('#uRole', form).value = p.role; const c = data.all('work_centres').find((x) => x.key === p.centre); if (c) $('#uCentre', form).value = c.id; };
     form.onsubmit = (ev) => {
       ev.preventDefault(); err.hidden = true;
       busy(form.querySelector('[type="submit"]'), async () => {
         try {
-          const input = { name: $('#uName', form).value, email: $('#uEmail', form).value, role: $('#uRole', form).value, extra: $$('#uExtra input:checked', form).map((c) => c.value) };
+          const input = { name: $('#uName', form).value, email: $('#uEmail', form).value, role: $('#uRole', form).value, position: $('#uPos', form).value, centre: $('#uCentre', form).value, extra: $$('#uExtra input:checked', form).map((c) => c.value) };
           if ($('#uPass', form).value) input.password = $('#uPass', form).value;
-          if (u) { if (u.id !== data.user.id) input.active = $('#uActive', form).checked; else { delete input.role; } await api.updateUser(u.id, input); } else await api.createUser(input);
+          if (u) { if (u.id !== data.user.id) input.active = $('#uActive', form).checked; else { delete input.role; delete input.position; } await api.updateUser(u.id, input); } else await api.createUser(input);
           toast(u ? 'Saved' : 'Team member added'); d.close(); render();
         } catch (ex) { err.textContent = ex.message; err.hidden = false; }
       });

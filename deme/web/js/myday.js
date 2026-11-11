@@ -126,7 +126,7 @@ export function mount(el) {
     renderTasks(T);
   }
 
-  el.addEventListener('click', (e) => {
+  el.firstElementChild.addEventListener('click', (e) => {   // on this screen's own root: the mount element outlives the screen
     const check = e.target.closest('#mdCheckBtn'), task = e.target.closest('[data-task]');
     if (check) busy(check, async () => { const out = await api.act(check.dataset.do); toast(out.message || 'Saved.'); });
     else if (task) busy(task, async () => { const out = await api.act('task.done', {}, { entity: 'tasks', id: task.dataset.task }); toast(out.message || 'Task done.'); });

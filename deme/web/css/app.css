@@ -76,7 +76,7 @@ a { color: inherit; }
 /* ───── Shell ───── */
 .shell { height: 100%; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); }
 .rail { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--surface); min-height: 0; z-index: 40; }
-.rail-top { padding: 18px 20px 12px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rail-top { padding: 18px 20px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { font: 300 26px/1 var(--font-display); letter-spacing: -.03em; text-decoration: none; }
 .finder { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
 .finder label { display: flex; align-items: center; gap: 6px; }
@@ -226,3 +226,25 @@ input[type="checkbox"] { accent-color: var(--ink); width: 16px; height: 16px; }
   .auth-form { justify-content: flex-start; padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+/* Notices: the bell in the rail and its panel. */
+.bell { position: relative; width: 32px; height: 32px; }
+.topbar .bell { margin-left: auto; }
+.bell-n { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--ink); color: #fff; font: 500 10px/17px var(--font-mono); text-align: center; }
+.inbox { position: fixed; z-index: 120; width: min(360px, calc(100vw - 16px)); max-height: min(70vh, 520px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow-2, 0 18px 50px rgba(0, 0, 0, .14)); animation: rise .25s var(--ease-out) both; }
+.inbox header { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.inbox header h2 { font-size: 15px; font-weight: 500; }
+.inbox header .link { margin-left: auto; font-size: 12px; }
+.inbox ul { list-style: none; margin: 0; padding: 0; }
+.inbox li button { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 11px 14px 11px 26px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; position: relative; color: var(--ink-2); }
+.inbox li button:hover { background: var(--surface-2); }
+.inbox li .is-new { color: var(--ink); }
+.inbox li .is-new::before { content: ""; position: absolute; left: 11px; top: 17px; width: 7px; height: 7px; border-radius: 50%; background: var(--g); }
+.inbox-text { font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.inbox-meta { font: 400 11px var(--font-mono); color: var(--ink-3); }
+.inbox-none { padding: 26px 14px; text-align: center; color: var(--ink-3); }
+/* A person, shown as their initials. */
+.av { display: inline-grid; place-items: center; width: var(--av, 28px); height: var(--av, 28px); border-radius: 50%; background: var(--surface-3); color: var(--ink); font: 500 calc(var(--av, 28px) * .38)/1 var(--font-mono); letter-spacing: .02em; flex: none; position: relative; isolation: isolate; overflow: hidden; }
+.av::before { content: ""; position: absolute; inset: 0; background: var(--g); opacity: .35; z-index: -1; }
+.av-none { background: transparent; border: 1.5px dashed var(--line-2); color: var(--ink-3); }
+.av-none::before { display: none; }

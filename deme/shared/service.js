@@ -35,7 +35,8 @@ export function titleOf(entity, doc) {
 }
 
 const modulesFor = (e) => [e.module, ...(e.alsoWrite || [])];
-const canRead = (user, e) => modulesFor(e).some((m) => can(user, m, 'read'));
+// `open` record types (the organisation itself) can be read by anyone who is signed in.
+const canRead = (user, e) => (!!e.open && !!user) || modulesFor(e).some((m) => can(user, m, 'read'));
 const canWrite = (user, e) => !e.readonly && (can(user, e.module, e.level || 'write') || (e.alsoWrite || []).some((m) => can(user, m, 'write')));
 
 export function createService(db, { actions = {}, hash = null } = {}) {
@@ -198,6 +199,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       if (svc.hasUsers()) fail('Deme is already set up. Sign in instead.', 409);
       // The first account belongs to whoever sets the system up, not to the founder: the founder
       // is added like everyone else and sees the result.
+      checkPassword(password);
       const user = await makeUser({ name, email, password, role: 'admin' });
       db.tx(() => {
         for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: user.createdAt, createdBy: user.id });
@@ -412,8 +414,9 @@ export function createService(db, { actions = {}, hash = null } = {}) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail('Enter a valid email address.');
     if (!ROLES[role]) fail('Choose a role.');
     if (svc.findUserByEmail(email)) fail('That email is already in use.');
-    checkPassword(password);
-    return { id: newId(), name, email, role, extra: (extra || []).filter((m) => MODULES[m]), active: true, pass: await hash(password), createdAt: new Date().toISOString() };
+    // No password means the person signs in with Google only.
+    if (password) checkPassword(password);
+    return { id: newId(), name, email, role, extra: (extra || []).filter((m) => MODULES[m]), active: true, pass: password ? await hash(password) : null, createdAt: new Date().toISOString() };
   }
   return svc;
 }

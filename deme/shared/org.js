@@ -64,3 +64,9 @@ export const isHead = (centres, user, centreId = null) => !!user && (centres || 
 
 /** Is this task one of the user's? Named on it, or it belongs to their position and nobody is named. */
 export const isMine = (task, user) => !!user && (task.assignee === user.id || (!task.assignee && !!task.ownerRole && task.ownerRole === user.position));
+
+const KEYS = DEFAULT_CENTRES.map((c) => c[0]), STAGE_ORDER = ['cut', 'stitch', 'finish', 'qc', 'pack'];
+/** Work centres in the order the business runs, then any added later by name. */
+export const byCentre = (a, b) => ((KEYS.indexOf(a.key) + 1) || 99) - ((KEYS.indexOf(b.key) + 1) || 99) || String(a.name).localeCompare(String(b.name));
+/** Workstations in the order work flows through them, then by name. */
+export const byStation = (a, b) => ((STAGE_ORDER.indexOf(a.stage) + 1) || 9) - ((STAGE_ORDER.indexOf(b.stage) + 1) || 9) || String(a.name).localeCompare(String(b.name));

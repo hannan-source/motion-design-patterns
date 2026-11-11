@@ -5,15 +5,16 @@ import { api, data } from './api.js';
 import { $, esc, info, wireInfo, oops, busy, toast } from './ui.js';
 import { mountField, cssVarFor } from './fx.js';
 import { MODULES, ROLES, ENTITIES, entityById } from '../shared/schema.js';
+import { positionById, isHead } from '../shared/org.js';
 
 // Each area of the app wears one of the shared gradients.
 export const VARIANT = {
-  home: 'services', guide: 'hll-ai', import: 'engagement', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
+  home: 'services', journey: 'hll-people', org: 'about', guide: 'hll-ai', import: 'engagement', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
   masters: 'about', purchasing: 'engagement', inventory: 'industries', quality: 'hll-trust', production: 'services', b2b: 'contact', b2c: 'hll-application',
   logistics: 'hll-ai', finance: 'hll-foundation', hr: 'hll-people', projects: 'hll-ontology', marketing: 'engagement', design: 'about', admin: 'contact',
 };
 const VIEWS = {
-  home: () => import('./home.js'), map: () => import('./map.js'), room: () => import('./room.js'),
+  home: () => import('./home.js'), journey: () => import('./journey.js'), org: () => import('./org.js'), map: () => import('./map.js'), room: () => import('./room.js'),
   myday: () => import('./myday.js'), guide: () => import('./guide.js'), import: () => import('./smart.js'), pulse: () => import('./pulse.js'), tracker: () => import('./tracker.js'), scan: () => import('./scan.js'), gate: () => import('./gate.js'), erp: () => import('./erp.js'),
 };
 const slug = (id) => id.replace(/_/g, '-');
@@ -27,7 +28,11 @@ function menu() {
   const c = data.can;
   const works = ['production', 'inventory', 'quality', 'b2b', 'b2c', 'logistics', 'finance', 'purchasing'].some((m) => c(m, 'read'));
   const top = [], floor = [], mods = [];
-  if (c('admin', 'admin')) top.push(['pulse', 'Founder view']);
+  // The founder opens on the result; everyone else opens on what is theirs to do.
+  const founder = data.user.position === 'founder' || data.user.role === 'founder';
+  if (founder) top.push(['pulse', 'Founder view'], ['journey', 'My journey']);
+  else { top.push(['journey', 'My journey']); if (c('admin', 'admin')) top.push(['pulse', 'Founder view']); }
+  if (c('projects', 'read')) top.push(['org', 'Work centres']);
   if (works) top.push(['home', 'Today'], ['map', 'Business map']);
   if (c('production', 'read') || c('b2b', 'read') || c('design', 'read')) top.push(['room', 'Production room']);
   if (c('production', 'scan')) floor.push(['scan', 'Scan station']);
@@ -43,6 +48,7 @@ const firstRoute = () => { const m = menu(); return (m.top[0] || m.floor[0])[0];
 function parse() {
   const h = location.hash.slice(1);
   if (h === 'm-projects') return { view: 'tracker', module: 'projects', key: 'projects', name: h };
+  if (h.startsWith('task-')) return { view: 'tracker', module: 'projects', key: 'projects', name: 'm-projects', task: h.slice(5) };   // a link from a notice or an email
   if (h.startsWith('m-') && MODULES[h.slice(2)]) return { view: 'erp', module: h.slice(2), key: h.slice(2), name: h };
   if (h.startsWith('e-') && entityById[unslug(h.slice(2))]) { const e = entityById[unslug(h.slice(2))]; return { view: 'erp', module: e.module, entity: e.id, key: e.module, name: h }; }
   if (VIEWS[h] && h !== 'erp' && h !== 'tracker') return { view: h, key: h, name: h };
@@ -116,13 +122,42 @@ async function route() {
   }
 }
 
+// ── Notices: what needs this person, wherever they are in the app ──
+const BELL = '<svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 3.2-1.5 4.6-1.5 4.6h12s-1.5-1.4-1.5-4.6A4.5 4.5 0 0 0 10 3zM8.3 15a1.8 1.8 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const unread = () => data.inbox.filter((n) => !n.read).length;
+const bell = (id) => `<button class="icon-btn bell" type="button" id="${id}" aria-label="Notices" aria-expanded="false">${BELL}<span class="bell-n" ${unread() ? '' : 'hidden'}>${unread()}</span></button>`;
+const ago = (at) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 60000)); return m < 1 ? 'now' : m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`; };
+function paintBell() { document.querySelectorAll('.bell').forEach((b) => { const n = b.querySelector('.bell-n'); n.textContent = unread(); n.hidden = !unread(); }); const box = document.querySelector('.inbox'); if (box) box.innerHTML = inboxHtml(); }
+const inboxHtml = () => `<header><h2>Notices</h2>${info(api.caps.mail ? 'Each notice is also sent to your email.' : 'What needs you: a task given to you, a request to your work centre, a comment, something you were waiting for. Email notices switch on when the site has a mail key.', 'Notices')}${unread() ? '<button class="link" type="button" data-read-all>Mark all read</button>' : ''}</header>${data.inbox.length ? `<ul>${data.inbox.slice(0, 30).map((n) => `<li><button type="button" data-notice="${esc(n.id)}" data-link="${esc(n.link || '')}" class="${n.read ? '' : 'is-new'}"><span class="inbox-text">${esc(n.text)}</span><span class="inbox-meta">${esc(n.byName || '')}${n.byName ? ' · ' : ''}${ago(n.at)}</span></button></li>`).join('')}</ul>` : '<p class="inbox-none">Nothing needs you right now.</p>'}`;
+function closeInbox() { document.querySelector('.inbox')?.remove(); document.querySelectorAll('.bell').forEach((b) => b.setAttribute('aria-expanded', 'false')); }
+function toggleInbox(btn) {
+  if (document.querySelector('.inbox')) return closeInbox();
+  const box = document.createElement('section'); box.className = 'inbox'; box.setAttribute('aria-label', 'Notices'); box.innerHTML = inboxHtml();
+  document.body.appendChild(box); btn.setAttribute('aria-expanded', 'true');
+  const r = btn.getBoundingClientRect(); box.style.top = `${r.bottom + 8}px`; box.style.left = `${Math.max(8, Math.min(r.left, innerWidth - box.offsetWidth - 8))}px`;
+  box.addEventListener('click', async (e) => {
+    const all = e.target.closest('[data-read-all]'), one = e.target.closest('[data-notice]');
+    if (all) { await api.readInbox().catch(oops); return; }
+    if (!one) return;
+    const link = one.dataset.link; closeInbox();
+    api.readInbox([one.dataset.notice]).catch(() => {});
+    if (link) location.hash = link;
+  });
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('.inbox, .bell')) closeInbox(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeInbox(); });
+data.on((touched) => { if (touched.includes('notifications') || touched.includes('*')) paintBell(); });
+// While the app is open, look for new notices and other people's changes to tasks.
+setInterval(() => { if (data.ready && !document.hidden) data.poll().catch(() => {}); }, 40000);
+document.addEventListener('visibilitychange', () => { if (data.ready && !document.hidden) data.poll().catch(() => {}); });
+
 function shell() {
   const m = menu();
   const link = ([name, label, mod]) => `<a href="#${name}" data-route="${name}" style="--gi:${cssVarFor(VARIANT[mod || name] || 'services')}">${esc(label)}</a>`;
   app.innerHTML = `
     <div class="shell">
       <nav class="rail" aria-label="Main">
-        <div class="rail-top"><a class="brand" href="#${firstRoute()}">Deme</a></div>
+        <div class="rail-top"><a class="brand" href="#${firstRoute()}">Deme</a>${bell('bellBtn')}</div>
         <form class="finder" id="finder" role="search"><label class="eyebrow" for="finderBox">Scan or find ${info('Scan any tag or type any number: a roll, bundle, parcel tracking barcode, store piece, material code, order or document number. You are taken to the record, or to the scan screen that handles it. With no field selected, a handheld scanner works from anywhere in the app.', 'Scan or find')}</label><input class="input" id="finderBox" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="Tag or number"></form>
         <div class="rail-scroll">
           ${api.mode === 'local' ? `<div class="mode-flag">Preview without a server. Data stays in this browser. ${info('This page is running without the Deme server, so everything you add is saved only in this browser on this device. Run the server (see the README) for shared, permanent data and real sign-in.', 'Preview mode')}</div>` : ''}
@@ -131,14 +166,15 @@ function shell() {
           ${m.mods.length ? `<div class="rail-group"><p class="eyebrow">ERP</p>${m.mods.map(link).join('')}</div>` : ''}
           <div class="rail-group"><p class="eyebrow">Getting going</p>${m.start.map(link).join('')}</div>
         </div>
-        <div class="rail-foot"><div class="who"><strong>${esc(data.user.name)}</strong><span>${esc(ROLES[data.user.role].name)}</span></div><button class="btn btn-sm btn-quiet" type="button" id="signOut">Sign out</button></div>
+        <div class="rail-foot"><div class="who"><strong>${esc(data.user.name)}</strong><span>${esc(positionById[data.user.position]?.name || ROLES[data.user.role].name)}</span></div><button class="btn btn-sm btn-quiet" type="button" id="signOut">Sign out</button></div>
       </nav>
       <div class="stage">
-        <header class="topbar"><button class="icon-btn" type="button" id="navBtn" aria-label="Menu"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></button><span class="brand">Deme</span></header>
+        <header class="topbar"><button class="icon-btn" type="button" id="navBtn" aria-label="Menu"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></button><span class="brand">Deme</span>${bell('bellBtnTop')}</header>
         <main id="view" tabindex="-1"></main>
         <div class="glow" aria-hidden="true"></div>
       </div>
     </div>`;
+  document.querySelectorAll('.bell').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); toggleInbox(b); }));
   $('#finder').addEventListener('submit', (e) => { e.preventDefault(); const box = $('#finderBox'); if (followCode(box.value)) box.value = ''; });
   $('#signOut').addEventListener('click', async () => { await api.logout().catch(() => {}); data.clear(); start(); });
   $('#navBtn').addEventListener('click', () => {
@@ -148,6 +184,7 @@ function shell() {
   });
 }
 
+const G = '<svg viewBox="0 0 18 18" width="15" height="15" aria-hidden="true"><path d="M15.4 5.9A7 7 0 1 0 16 9H9.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function auth(setup) {
   if (cleanup) { try { cleanup(); } catch { /* leaving */ } cleanup = null; }
   app.innerHTML = `
@@ -155,12 +192,12 @@ function auth(setup) {
       <form class="auth-form" novalidate>
         <div><p class="sect">Deme Intelligence</p></div>
         <h1 class="reveal">${setup ? 'Set up Deme' : 'Sign in'}</h1>
-        ${setup ? `<p class="muted">Nothing has been set up yet. The first account becomes the founder, with access to everything. ${info('The founder account can add every other team member under Admin, choose their role and reset passwords. Roles decide which modules a person can open and whether they can add, approve or only look.', 'First account')}</p>` : ''}
+        ${setup ? `<p class="muted">Nothing has been set up yet. The first account belongs to whoever is setting the system up. ${info('The first account is the system admin: it shapes the work centres, names the person in charge of each, creates the go-live plan and invites the team. The founder is added like everyone else and opens on the Founder view, which shows the result. Nobody has to share this login.', 'First account')}</p>` : ''}
         ${setup ? '<div class="field"><label for="aName">Your name</label><input class="input" id="aName" autocomplete="name" required></div>' : ''}
         <div class="field"><label for="aEmail">Work email</label><input class="input" id="aEmail" type="email" autocomplete="username" required></div>
         <div class="field"><label for="aPass">Password</label><input class="input" id="aPass" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" required minlength="8">${setup ? '<span class="hint">At least 8 characters.</span>' : ''}</div>
         <p class="error" role="alert" hidden></p>
-        <div class="row"><button class="btn btn-primary" type="submit">${setup ? 'Create the founder account' : 'Sign in'}</button>${api.caps.google ? `<a class="btn btn-outline" href="/api/auth/google/start">${setup ? 'Set up with Google' : 'Sign in with Google'}</a>${info('Use your Deme Google Workspace account. People already on the team list sign in as themselves. Anyone else in the Workspace is let in with self-service access only (attendance, leave, their own tasks) until an admin gives them a role.', 'Google sign-in')}` : ''}</div>
+        <div class="row"><button class="btn btn-primary" type="submit">${setup ? 'Create the admin account' : 'Sign in'}</button>${api.caps.google ? `<a class="btn btn-outline" href="/api/auth/google/start">${G}${setup ? 'Set up with Google' : 'Sign in with Google'}</a>${info('Use your Deme Google Workspace account. People already on the team list sign in as themselves. Anyone else in the Workspace comes in, picks the position they hold, and waits for the head of that work centre to confirm it.', 'Google sign-in')}` : `<button class="btn btn-outline" type="button" id="gOff">${G}Sign in with Google</button>${info(api.mode === 'local' ? 'Google sign-in works on the live site, not in this preview: a preview has no server to check the account with Google. Once the site is live with Deme\'s Google Workspace keys, this button signs the team in with their work accounts.' : 'Google sign-in is not connected yet. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_WORKSPACE_DOMAIN to the site settings (docs/GO-LIVE.md), redeploy, and this button signs the team in with their work accounts.', 'Google sign-in')}`}</div>
         ${api.mode === 'local' ? `<p class="faint" style="font-size:12px">Preview without a server: accounts and data are kept in this browser only. ${info('Open this app from the Deme server to share data across the team. In this preview, anyone using this browser profile can read what is stored.', 'Preview mode')}</p>` : ''}
       </form>
       <div class="auth-field"><canvas aria-hidden="true"></canvas><div class="wordmark" aria-hidden="true">Deme</div></div>
@@ -168,6 +205,7 @@ function auth(setup) {
   document.documentElement.style.setProperty('--g', cssVarFor('services'));
   stopField?.(); stopField = mountField($('.auth-field canvas'), 'services');
   const form = $('.auth-form'), err = $('.error', form);
+  $('#gOff')?.addEventListener('click', () => { err.textContent = api.mode === 'local' ? 'Google sign-in works on the live site. This preview keeps accounts in your browser, so use an email and password here.' : 'Google sign-in is not connected on this site yet.'; err.hidden = false; });
   form.addEventListener('submit', (e) => {
     e.preventDefault(); err.hidden = true;
     busy(form.querySelector('button[type="submit"]'), async () => {

@@ -132,7 +132,7 @@ export function mount(el, ctx) {
       preview(); focus();
     });
   });
-  el.addEventListener('click', (e) => {
+  el.firstElementChild.addEventListener('click', (e) => {   // on this screen's own root: the mount element outlives the screen
     const fill = e.target.closest('[data-fill]'), open = e.target.closest('[data-open]');
     if (fill) { input.value = fill.dataset.fill; preview(); focus(); el.querySelector('.workspace').scrollTo({ top: 0 }); }
     else if (open) ctx.openEntity('parcels', { id: open.dataset.open });
