@@ -1,0 +1,307 @@
+/* Orders: the board of slips, a slip in the drawer, the order form, who made what, and the scan
+   page. Everything is scoped under .orders (the screen, and the wrapper inside the shared drawer)
+   or .or-print (the printed slips). Tokens from app.css only. --lc is the colour of a lane. */
+.orders { --lc: var(--ink-3); }
+.orders .is-start { --lc: var(--ink-3); } .orders .is-master { --lc: var(--material); } .orders .is-stitch { --lc: var(--data); }
+.orders .is-qc { --lc: var(--money); } .orders .is-finish { --lc: var(--ok); } .orders .is-out { --lc: var(--ink); } .orders .is-off { --lc: var(--ink-3); }
+.orders .workspace-inner { max-width: 1480px; }
+.orders .or-top { gap: 8px 10px; }
+.orders .or-note { display: inline-flex; align-items: center; gap: 2px; }
+.orders .or-chiprow { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.orders button.chip { color: var(--ink); background: var(--surface); text-transform: none; letter-spacing: .02em; font-size: 12px; max-width: 100%; transition: border-color .2s, background .2s; }
+.orders button.chip:hover { border-color: var(--ink); }
+.orders button.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+
+/* Find and filter */
+.orders .or-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.orders .or-q { flex: 1 1 230px; max-width: 340px; min-height: 40px; }
+.orders .or-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; flex: 1 1 320px; }
+.orders .or-f { text-transform: uppercase; letter-spacing: .08em; font-size: 11px; min-height: 32px; }
+.orders .or-f b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.orders .or-f.is-crit[aria-pressed="false"] b { color: var(--crit); }
+.orders .or-f.is-crit[aria-pressed="false"] { border-color: var(--crit); }
+
+/* Priority: three bars, more of them filled the higher it is */
+.orders .or-prio { display: inline-flex; align-items: flex-end; gap: 2px; flex: none; color: var(--ink-3); font: 400 10.5px/11px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.orders .or-prio i { width: 3px; border-radius: 1px; background: var(--line-2); }
+.orders .or-prio i:nth-child(1) { height: 5px; } .orders .or-prio i:nth-child(2) { height: 8px; } .orders .or-prio i:nth-child(3) { height: 11px; }
+.orders .or-prio b { font-weight: 400; margin-left: 4px; }
+.orders .or-prio.is-low i:nth-child(1) { background: var(--ink-3); }
+.orders .or-prio.is-medium { color: var(--ink-2); }
+.orders .or-prio.is-medium i:nth-child(-n+2) { background: var(--ink-2); }
+.orders .or-prio.is-high { color: var(--crit); padding: 3px 7px; border-radius: 999px; background: var(--crit-soft); }
+.orders .or-prio.is-high i { background: var(--crit); }
+.orders .or-prio.is-high b { font-weight: 500; }
+
+/* Loud marks: missing, needs measurements, back for rework, rejected */
+.orders .or-marks { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.orders .or-mark { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: var(--r-sm); background: var(--crit); color: var(--surface); font: 500 11px/1.3 var(--font-mono); letter-spacing: .05em; text-transform: uppercase; overflow-wrap: anywhere; min-width: 0; }
+.orders .or-mark::before { content: "!"; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--surface); color: var(--crit); font: 600 11px/1 var(--font-mono); flex: none; }
+.orders .or-mark.is-warn { background: var(--money); color: var(--ink); }
+.orders .or-mark.is-warn::before { background: var(--ink); color: var(--money); }
+.orders .or-mark.is-plain { background: var(--surface-3); color: var(--ink-2); }
+.orders .or-mark.is-plain::before { content: "×"; background: var(--ink-3); color: var(--surface); }
+
+/* Ten stops as a strip: done, now, to come */
+.orders .or-strip { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 2px; }
+.orders .or-strip i { height: 4px; border-radius: 2px; background: var(--surface-3); }
+.orders .or-strip .is-done { background: var(--lc); opacity: .4; }
+.orders .or-strip .is-now { background: var(--lc); }
+
+/* The board: lanes left to right */
+.orders .or-board { min-width: 0; }
+.orders .or-stops { display: none; }
+.orders .or-lanes { display: grid; grid-template-columns: repeat(var(--n, 6), minmax(186px, 1fr)); gap: 10px; align-items: start; overflow-x: auto; padding-bottom: 10px; }
+.orders .or-lane { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px 8px 12px; border-top: 3px solid var(--lc); border-radius: var(--r-md); background: var(--surface-2); }
+.orders .or-lane > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; min-height: 24px; padding: 0 3px; }
+.orders .or-lane h2 { font: 500 13px/1.3 var(--font-body); letter-spacing: 0; }
+.orders .or-n { font: 400 11px/1.3 var(--font-mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.orders .or-n.is-stuck { color: var(--crit); text-transform: uppercase; letter-spacing: .05em; }
+.orders .or-all { margin-left: auto; padding: 2px 3px; border: 0; background: none; color: var(--ink-3); font: 400 10.5px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.orders .or-all:hover { color: var(--ink); }
+.orders .or-none { padding: 16px 8px; border: 1.5px dashed var(--line-2); border-radius: var(--r-md); text-align: center; color: var(--ink-3); font-size: 12.5px; }
+.orders .or-cards { display: flex; flex-direction: column; gap: 8px; }
+.orders .or-lane > .btn { align-self: flex-start; }
+
+/* A slip on the board */
+.orders .or-card { position: relative; border: 1px solid var(--line); border-left: 3px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); transition: border-color .2s, box-shadow .2s; }
+.orders .or-card.is-crit { border-left-color: var(--crit); } .orders .or-card.is-warn { border-left-color: var(--money); }
+.orders .or-card:hover { box-shadow: var(--shadow-1); }
+.orders .or-card.is-sel { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.orders .or-card-main { display: grid; gap: 4px; width: 100%; min-width: 0; padding: 10px 10px 11px; border: 0; border-radius: inherit; background: none; text-align: left; }
+.orders .or-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 18px; }
+.orders .or-pick ~ *, .orders .or-card:has(.or-pick) .or-card-top { padding-right: 26px; }
+.orders .or-card-top strong { font-weight: 500; font-size: 12.5px; letter-spacing: .03em; }
+.orders .or-card-style { font-size: 15.5px; line-height: 1.25; overflow-wrap: anywhere; }
+.orders .or-card-sub { font-size: 12.5px; color: var(--ink); }
+.orders .or-card-for { font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+.orders .or-card .or-marks { margin-block: 3px 1px; }
+.orders .or-card-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 8px; margin-top: 3px; }
+.orders .or-due, .orders .or-at { font: 400 10.5px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.orders .or-due.is-late { color: var(--crit); font-weight: 500; }
+.orders .or-at { color: var(--ink-2); }
+.orders .or-card .or-strip { margin-top: 3px; }
+.orders .or-pick { position: absolute; top: 3px; right: 3px; display: grid; place-items: center; width: 32px; height: 32px; cursor: pointer; }
+
+/* Many slips at once: stays in reach at the bottom */
+.orders .or-bar { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 14px; padding: 12px 16px; border: 1px solid var(--ink); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-2); }
+.orders .or-bar-n { margin-right: auto; font-size: 13px; color: var(--ink-2); }
+.orders .or-bar-n b { font: 300 26px/1 var(--font-display); letter-spacing: -.03em; color: var(--ink); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.orders .or-bar.is-give { flex-direction: column; align-items: stretch; }
+.orders .or-bar-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.orders .or-bar-row .input { flex: 1 1 180px; width: auto; }
+
+/* Steps and the small forms some of them need */
+.orders .or-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.orders .or-act.is-ok { background: var(--ok); border-color: var(--ok); }
+.orders .or-act.is-warn { background: var(--money); border-color: var(--money); color: var(--ink); }
+.orders .or-act.is-crit { background: var(--crit); border-color: var(--crit); }
+.orders .or-step { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface-2); }
+.orders .or-step-h { font: 400 17px/1.25 var(--font-display); letter-spacing: -.01em; }
+.orders .or-step-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.orders .or-reasons { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.orders .or-reason { min-height: 46px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); font-size: 14px; line-height: 1.2; transition: border-color .2s, background .2s; }
+.orders .or-reason:hover { border-color: var(--ink); }
+.orders .or-reason[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+
+/* A slip in the drawer */
+.orders.or-drawer { display: contents; }
+.orders .or-d-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.orders .or-state { --t: var(--lc); }
+.orders .or-d-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.orders .or-d-title h3 { font: 300 27px/1.15 var(--font-display); letter-spacing: -.02em; overflow-wrap: anywhere; }
+.orders .or-d-title p { margin-top: 4px; font-size: 15px; color: var(--ink-2); }
+.orders .or-d-main .or-mark { font-size: 12.5px; padding: 8px 10px; }
+.orders .or-track ol { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 3px; }
+.orders .or-track li { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.orders .or-track li i { height: 9px; border-radius: 5px; background: var(--surface-3); }
+.orders .or-track li.is-done i { background: var(--lc); opacity: .4; }
+.orders .or-track li.is-now i { background: var(--lc); }
+.orders .or-track li span { font: 400 9px/1.25 var(--font-mono); letter-spacing: .03em; text-transform: uppercase; color: var(--ink-3); overflow-wrap: anywhere; }
+.orders .or-track li.is-now span { color: var(--ink); font-weight: 500; }
+.orders .or-track-now { margin-top: 8px; font-size: 13.5px; }
+.orders .or-facts, .orders .or-ticket-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 0; }
+.orders .or-facts > div, .orders .or-ticket-facts > div { min-width: 0; }
+.orders .or-facts dt, .orders .or-ticket-facts dt { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.orders .or-facts dd, .orders .or-ticket-facts dd { margin-top: 2px; font-size: 14.5px; overflow-wrap: anywhere; }
+.orders .is-late dd { color: var(--crit); font-weight: 500; }
+.orders .or-notes { display: flex; flex-direction: column; gap: 6px; }
+.orders .or-notes p:last-child { padding: 10px 12px; border-left: 3px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; }
+.orders .or-qr { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 14px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.orders .or-qr > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.orders .or-qr .qr { flex: none; border-radius: var(--r-sm); }
+.orders .or-qr-no { font-size: 20px; letter-spacing: .04em; }
+.orders .or-trail ol { display: flex; flex-direction: column; margin: 10px 0 0 5px; border-left: 2px solid var(--line); }
+.orders .or-trail li { position: relative; display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 1px 10px; padding: 7px 0 7px 16px; font-size: 13.5px; }
+.orders .or-trail li::before { content: ""; position: absolute; left: -6px; top: 12px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink-3); background: var(--surface); }
+.orders .or-trail li:last-child::before { border-color: var(--ink); background: var(--ink); }
+.orders .or-trail time { font: 400 11px/1.6 var(--font-mono); color: var(--ink-3); }
+.orders .or-trail strong { font-weight: 500; }
+.orders .or-trail li span { grid-column: 2; font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+
+/* Place an order */
+.orders .or-form { gap: 18px; }
+.orders .or-form fieldset { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.orders .or-form legend { padding: 0; margin-bottom: 8px; }
+.orders .or-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.orders .or-kind { position: relative; display: block; cursor: pointer; }
+.orders .or-kind input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.orders .or-kind > span { display: flex; flex-direction: column; gap: 3px; height: 100%; min-height: 68px; padding: 11px 12px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); transition: border-color .2s, background .2s; }
+.orders .or-kind strong { font-weight: 500; font-size: 14.5px; line-height: 1.25; }
+.orders .or-kind small { font-size: 12px; line-height: 1.3; color: var(--ink-3); }
+.orders .or-kind:hover > span { border-color: var(--ink); }
+.orders .or-kind input:checked + span { border-color: var(--ink); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--ink), inset 0 -4px 0 var(--ink); }
+.orders .or-kind input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+.orders .or-styles { max-height: 214px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-md); overscroll-behavior: contain; }
+.orders .or-styles button, .orders .or-chosen { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 12px; text-align: left; }
+.orders .or-styles button { border: 0; border-bottom: 1px solid var(--line); background: none; }
+.orders .or-styles li:last-child button { border-bottom: 0; }
+.orders .or-styles button:hover, .orders .or-styles button:focus-visible { background: var(--surface-2); }
+.orders .or-styles strong, .orders .or-chosen strong { font-weight: 500; }
+.orders .or-styles .mono, .orders .or-chosen .mono { font-size: 11.5px; color: var(--ink-3); }
+.orders .or-chosen { align-items: center; border: 1px solid var(--ink); border-radius: var(--r-md); background: var(--surface-2); }
+.orders .or-chosen > div { display: flex; flex-direction: column; min-width: 0; }
+.orders .or-nostyle { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; border: 1.5px dashed var(--line-2); border-radius: var(--r-md); color: var(--ink-2); }
+.orders .or-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 14px; align-items: start; }
+.orders .or-size { min-width: 40px; justify-content: center; padding-inline: 10px; }
+.orders .or-qty { display: inline-flex; align-items: stretch; align-self: flex-start; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+.orders .or-qty button { width: 44px; min-height: 38px; border: 0; background: none; color: var(--ink-2); font: 400 18px/1 var(--font-mono); }
+.orders .or-qty button:hover { background: var(--surface-3); color: var(--ink); }
+.orders .or-qty input { width: 58px; min-width: 0; padding: 0 4px; border: 0; border-inline: 1px solid var(--line); background: none; text-align: center; font: 500 16px var(--font-mono); font-variant-numeric: tabular-nums; }
+.orders .or-qty :focus-visible, .orders .or-qty input:focus { outline: 2px solid var(--ink); outline-offset: -2px; }
+.orders .or-prioseg { align-self: flex-start; }
+.orders .or-prioseg [data-prio="high"][aria-pressed="true"] { color: var(--crit); }
+.orders .or-form-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.orders .or-form-foot .or-act { min-height: 46px; padding-inline: 26px; }
+.orders .or-placed { align-items: flex-start; }
+.orders .or-placed-no { font-size: clamp(34px, 9vw, 48px); line-height: 1; letter-spacing: -.02em; }
+.orders .or-placed-msg { font: 300 20px/1.3 var(--font-display); letter-spacing: -.01em; }
+.orders .or-placed-slips { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; width: 100%; }
+.orders .or-placed-slips button { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; padding: 10px 6px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); font-size: 12.5px; }
+.orders .or-placed-slips button:hover { border-color: var(--ink); }
+
+/* Who made what */
+.orders .or-made-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 14px; }
+.orders .or-made-head h2 { font-size: 22px; font-weight: 300; letter-spacing: -.02em; }
+.orders .or-made { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 22px; align-items: start; margin-top: 22px; }
+.orders .or-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.orders .or-people { display: flex; flex-direction: column; gap: 8px; }
+.orders .or-person { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); min-width: 0; }
+.orders .or-person.is-none { border-style: dashed; }
+.orders .or-person-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 12px 14px 9px; border: 0; border-radius: inherit; background: none; text-align: left; }
+.orders .or-person-name { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.orders .or-person-name strong { font-weight: 500; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orders .or-rate { display: block; height: 8px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+.orders .or-rate i { display: block; height: 100%; width: var(--v, 0%); border-radius: 4px; background: linear-gradient(90deg, var(--ok) 0 var(--c, 100%), var(--money) var(--c, 100%) 100%); }
+.orders .or-person-n { display: flex; flex-direction: column; align-items: flex-end; font: 400 10.5px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.orders .or-person-n b { font: 300 30px/1 var(--font-display); letter-spacing: -.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.orders .or-person-more { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 14px 12px; }
+.orders .or-made-style { display: inline-flex; align-items: baseline; gap: 6px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); font-size: 12.5px; }
+.orders .or-made-style b { font: 500 11px var(--font-mono); }
+.orders .or-pieces { border-top: 1px solid var(--line); }
+.orders .or-pieces button { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; width: 100%; padding: 9px 14px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; font-size: 13px; }
+.orders .or-pieces li:last-child button { border-bottom: 0; }
+.orders .or-pieces button:hover { background: var(--surface-2); }
+.orders .or-pieces strong { font-weight: 500; font-size: 12.5px; }
+.orders .or-pieces .or-due { margin-left: auto; }
+
+/* The scan page: one hand, one thumb */
+.orders.or-scan .workspace-inner { max-width: 560px; gap: 16px; }
+.orders .or-scanbox { display: flex; flex-direction: column; gap: 8px; }
+.orders .or-scanrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.orders .or-code { min-height: 68px; padding: 8px 14px; font: 400 clamp(22px, 6vw, 30px)/1.1 var(--font-mono); letter-spacing: .02em; text-transform: uppercase; }
+.orders .or-code::placeholder { color: var(--ink-3); text-transform: none; font: 300 clamp(17px, 4.6vw, 21px)/1.1 var(--font-display); letter-spacing: -.01em; }
+.orders .or-scanrow .btn { min-height: 68px; padding-inline: 22px; font-size: 13px; }
+.orders .or-camgo, .orders .or-cam .btn { min-height: 56px; font-size: 13px; }
+.orders .or-cam { display: flex; flex-direction: column; gap: 8px; }
+.orders .or-cam video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--r-md); background: var(--ink); }
+.orders .or-result { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 18px 20px; border: 1px solid var(--line); border-left: 6px solid var(--ok); border-radius: var(--r-lg); background: var(--ok-soft); animation: rise .4s var(--ease-out) both; }
+.orders .or-result[data-tone="crit"] { border-left-color: var(--crit); background: var(--crit-soft); }
+.orders .or-result .eyebrow { color: var(--ink-2); }
+.orders .or-result-text { font: 300 clamp(21px, 5.4vw, 28px)/1.25 var(--font-display); letter-spacing: -.02em; overflow-wrap: anywhere; }
+.orders .or-result .btn { min-height: 52px; font-size: 13px; white-space: normal; }
+.orders #orSlip { display: flex; flex-direction: column; gap: 12px; scroll-margin: 12px; }
+.orders .or-ticket { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--line-2); border-top: 5px solid var(--lc); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-1); }
+.orders .or-ticket > header { display: flex; align-items: center; gap: 12px; }
+.orders .or-ticket > header strong { font-size: 20px; font-weight: 500; letter-spacing: .03em; }
+.orders .or-ticket > header .icon-btn { margin-left: auto; width: 40px; height: 40px; font-size: 18px; }
+.orders .or-ticket h2 { font: 300 clamp(26px, 7vw, 34px)/1.1 var(--font-display); letter-spacing: -.02em; overflow-wrap: anywhere; }
+.orders .or-ticket .or-mark { font-size: 14px; padding: 10px 12px; }
+.orders .or-ticket .or-mark::before { width: 20px; height: 20px; font-size: 13px; }
+.orders .or-ticket-facts .big dd { font: 300 26px/1.1 var(--font-display); letter-spacing: -.02em; }
+.orders .or-ticket-facts .big.is-late dd { font-weight: 400; }
+.orders .or-ticket-at { display: flex; flex-direction: column; gap: 6px; }
+.orders .or-ticket-at .or-strip i { height: 7px; border-radius: 4px; }
+.orders .or-ticket-at > span:last-child { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.orders .or-acts.is-big { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.orders .or-acts.is-big .or-act:first-child, .orders .or-acts.is-big .or-act:last-child:nth-child(even) { grid-column: 1 / -1; }
+.orders .or-acts.is-big .or-act { min-height: 72px; padding: 10px 14px; font-size: 15px; line-height: 1.25; white-space: normal; }
+.orders .or-acts.is-big .or-act:first-child { min-height: 88px; font-size: 17px; }
+.orders .or-step.is-big { padding: 16px; gap: 14px; }
+.orders .or-step.is-big .or-step-h { font-size: 21px; }
+.orders .or-step.is-big .or-reasons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.orders .or-step.is-big .or-reason { min-height: 64px; font-size: 16px; }
+.orders .or-step.is-big .input { min-height: 54px; font-size: 16px; }
+.orders .or-step.is-big .chip { min-height: 46px; padding: 8px 14px; font-size: 14px; }
+.orders .or-step.is-big .or-step-foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.orders .or-step.is-big .or-step-foot .btn { min-height: 64px; font-size: 14px; white-space: normal; }
+.orders .or-idle { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; border: 1.5px dashed var(--line-2); border-radius: var(--r-md); font-size: 16px; }
+.orders .or-idle .btn { min-height: 52px; }
+.orders .or-wait { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 30px 16px; border: 1.5px dashed var(--line-2); border-radius: var(--r-lg); text-align: center; color: var(--ink-3); }
+.orders .or-wait-qr { display: block; opacity: .3; }
+.orders .or-recent { display: flex; flex-direction: column; gap: 6px; }
+.orders .or-recent:empty { display: none; }
+.orders .or-recent button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 10px; width: 100%; min-height: 50px; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; }
+.orders .or-recent button:hover { background: var(--surface-2); }
+.orders .or-recent strong { font-weight: 500; }
+.orders .or-recent span { font-size: 13.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.orders .or-recent time { font: 400 11px var(--font-mono); color: var(--ink-3); }
+
+/* On a phone the stops become six counts; tap one to see its slips */
+@media (max-width: 760px) {
+  .orders .or-stops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .orders .or-stop { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; min-height: 62px; padding: 8px 9px 9px; border: 1px solid var(--line); border-top: 3px solid var(--lc); border-radius: var(--r-md); background: var(--surface); text-align: left; }
+  .orders .or-stop b { font: 300 24px/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .orders .or-stop span { font: 400 10px/1.25 var(--font-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); overflow-wrap: anywhere; }
+  .orders .or-stop i { position: absolute; top: 9px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--crit); }
+  .orders .or-stop[aria-pressed="true"] { border-color: var(--ink); border-top-color: var(--lc); background: var(--surface-2); box-shadow: inset 0 -3px 0 var(--ink); }
+  .orders .or-lanes { display: block; overflow: visible; padding-bottom: 0; }
+  .orders .or-lane:not(.is-on) { display: none; }
+  .orders .or-q { max-width: none; flex-basis: 100%; }
+  .orders .or-top .btn-primary { flex: 1 1 auto; }
+  .orders .or-bar { bottom: 8px; padding: 10px 12px; }
+  .orders .or-bar .btn { flex: 1 1 auto; }
+}
+@media (max-width: 560px) {
+  .orders .or-track li span { display: none; }
+  .orders .or-grid2 { grid-template-columns: minmax(0, 1fr); }
+  .orders .or-trail li { grid-template-columns: minmax(0, 1fr); }
+  .orders .or-trail li span { grid-column: 1; }
+}
+
+/* Printed slips. The area is hidden on screen and is the only thing on paper (see #printArea in erp.css). */
+.or-print { color: var(--ink); font: 400 10pt/1.35 var(--font-body); }
+.or-print .mono { font-family: var(--font-mono); }
+.or-print .or-sheets { display: flex; flex-direction: column; gap: 6mm; }
+.or-print .or-slip { display: flex; flex-direction: column; gap: 3mm; min-height: 126mm; padding: 6mm; border: 0.3mm dashed var(--ink-3); border-radius: 1.5mm; break-inside: avoid; }
+.or-print .or-slip > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 6mm; padding-bottom: 3mm; border-bottom: 0.4mm solid var(--ink); }
+.or-print .or-slip > header > div { display: flex; flex-direction: column; gap: 1.5mm; min-width: 0; }
+.or-print .or-slip > header span { font: 400 8pt var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.or-print .or-slip > header strong { font: 500 30pt/1 var(--font-mono); letter-spacing: -.01em; }
+.or-print .or-slip > header em { font-style: normal; font-weight: 500; font-size: 10pt; }
+.or-print .or-slip > header svg { width: 34mm; height: 34mm; flex: none; }
+.or-print .or-slip-style { font: 400 17pt/1.15 var(--font-display); }
+.or-print .or-slip-style small { font-size: 9pt; margin-left: 2mm; }
+.or-print dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2.5mm 5mm; margin: 0; }
+.or-print dl .wide { grid-column: 1 / -1; }
+.or-print dl .big { grid-column: span 2; }
+.or-print dt { font: 400 7.5pt var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.or-print dd { margin: 0; font-size: 10.5pt; overflow-wrap: anywhere; }
+.or-print .big dd { font: 300 20pt/1.05 var(--font-display); }
+.or-print .pre dd { white-space: pre-wrap; }
+.or-print .or-slip-qc { display: flex; flex-wrap: wrap; align-items: center; gap: 2mm 5mm; margin-top: auto; padding-top: 3mm; border-top: 0.2mm solid var(--line-2); font-size: 9.5pt; }
+.or-print .or-slip-qc > span { font: 400 7.5pt var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.or-print .or-slip-qc label { display: inline-flex; align-items: center; gap: 1.5mm; }
+.or-print .or-slip-qc i { display: inline-block; width: 4.5mm; height: 4.5mm; border: 0.3mm solid var(--ink); }
+.or-print .or-slip-sign { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6mm; padding-top: 8mm; }
+.or-print .or-slip-sign span { padding-top: 1mm; border-top: 0.2mm solid var(--ink-3); font: 400 7.5pt var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
