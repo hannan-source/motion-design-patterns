@@ -75,6 +75,9 @@ const ctx = {
  */
 function findCode(raw) {
   const code = String(raw || '').trim(); if (!code) return null;
+  // A slip's QR code holds a link to it; its number alone works too.
+  const slip = /slip-([A-Za-z]+-\d+)/i.exec(code)?.[1] || (data.all('slips').some((x) => String(x.no).toLowerCase() === code.toLowerCase()) ? code : '');
+  if (slip) return { name: `slip-${slip.toUpperCase()}`, opts: {} };
   const lc = code.toLowerCase();
   const hit = (entity, key) => (data.canRead(entity) ? data.all(entity).find((d) => String(d[key] ?? '').toLowerCase() === lc) : null);
   const canGate = data.can('logistics', 'write') || data.can('b2c', 'write') || data.can('production', 'write');

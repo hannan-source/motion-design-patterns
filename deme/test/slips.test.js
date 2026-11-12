@@ -77,6 +77,9 @@ test('everyone can follow an order; only production sees who is on it', () => {
   assert.equal(online.customerName, undefined, 'and no customer name for teams that do not handle the order');
   assert.equal(slips(sales).find((x) => x.orderNo === '#3001').customerName, 'Ana Lima');
   assert.throws(() => svc.update(marketing, 'slips', mine.id, { status: 'dispatched' }), /cannot change/);
+  // everyone can read the style list to follow and place orders, without prices or the bill of materials
+  const seenStyle = svc.list(tailor, 'styles').find((x) => x.id === kaftan.id);
+  assert.equal(seenStyle.name, 'Isla kaftan'); assert.equal('wholesale' in seenStyle, false);
 });
 
 test('a slip can be marked as missing fabric by hand, and everyone following it sees why', () => {

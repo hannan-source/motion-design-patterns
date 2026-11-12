@@ -211,7 +211,7 @@ function mountBoard(el, ctx) {
         ${P.shop ? (api.caps.shopify ? '<button type="button" class="btn btn-outline" data-pull>Pull from Shopify</button>' : `<span class="or-note"><button type="button" class="btn btn-quiet" data-import>Import orders</button>${info('Online orders come in by import until the Shopify connection is on. After that they arrive here by themselves.', 'Shopify')}</span>`) : ''}
         ${P.place ? '<button type="button" class="btn btn-primary" data-place>Place an order</button>' : ''}</div></div>
     <div class="or-tools" id="orTools"><input class="input or-q" id="orQ" type="search" autocomplete="off" placeholder="Find an order, slip or style" aria-label="Find an order, slip or style"><div class="or-filters" id="orFilters"></div></div>
-    <div id="orBody"></div><div id="orBar"></div></div></div>`;
+    <div id="orBody"></div><div class="or-barwrap" id="orBar"></div></div></div>`;
   const root = $('#orRoot', el), body = $('#orBody', root), bar = $('#orBar', root), filters = $('#orFilters', root), tools = $('#orTools', root), box = $('#orQ', root);
   const st = { view: 'board', q: '', f: new Set(), source: '', lane: '', more: new Set(), sel: new Set(), give: false, master: '', period: '30', who: '' };
   let gone = false, down = false, later = false, dr = null, form = null;
@@ -249,13 +249,13 @@ function mountBoard(el, ctx) {
   }
   function cardHtml(s) {
     const due = dueOf(s), lane = laneOf(s), tone = marksOf(s)[0]?.[0] || '', sub = [s.size, s.colour].filter(Boolean).join(' · '), who = forLine(s);
-    return `<li class="or-card ${tone ? `is-${tone}` : ''} ${st.sel.has(s.id) ? 'is-sel' : ''}" data-card="${s.id}">
+    return `<li class="or-card ${tone ? `is-${tone}` : ''} ${P.prod ? 'has-pick' : ''} ${st.sel.has(s.id) ? 'is-sel' : ''}">
       <button type="button" class="or-card-main" data-open="${s.id}" data-fk="c-${s.id}">
         <span class="or-card-top"><strong class="mono">${esc(s.no)}</strong>${prioHtml(s)}</span>
         <span class="or-card-style">${esc(pieceName(s))}</span>
         ${sub ? `<span class="or-card-sub">${esc(sub)}</span>` : ''}${who ? `<span class="or-card-for">${esc(who)}</span>` : ''}${s.purpose ? `<span class="or-card-for">${esc(s.purpose)}</span>` : ''}
         ${marksHtml(s)}
-        <span class="or-card-foot"><span class="or-due ${due.late ? 'is-late' : ''}">${esc(due.text)}</span>${STATUS[s.status] !== lane.name ? `<span class="or-at">${esc(STATUS[s.status])}</span>` : ''}</span>
+        <span class="or-card-foot"><span class="or-due ${due.late ? 'is-late' : ''}">${esc(due.text)}</span>${STATUS[s.status] !== lane.name && !['rework', 'rejected', 'cancelled'].includes(s.status) ? `<span class="or-at">${esc(STATUS[s.status])}</span>` : ''}</span>
         ${stripHtml(s)}
       </button>
       ${P.prod ? `<label class="or-pick"><input type="checkbox" data-sel="${s.id}" data-fk="s-${s.id}" ${st.sel.has(s.id) ? 'checked' : ''} aria-label="Select ${esc(s.no)}"></label>` : ''}
@@ -268,15 +268,15 @@ function mountBoard(el, ctx) {
     if (!M.shown.length) return '<section class="panel empty"><h3>No slips match</h3><button type="button" class="btn btn-primary" data-clear data-fk="e-clear">Show all slips</button></section>';
     if (!st.lane || !M.lanes.some((l) => l.id === st.lane)) st.lane = (M.lanes.find((l) => l.slips.length) || M.lanes[0]).id;
     const stuckIn = (l) => l.slips.filter(isStuck).length;
-    return `<div class="or-board" style="--n:${M.lanes.length}">
+    return `<div class="or-board" style="--n:${M.lanes.filter((l) => !l.fold).length + 1}">
       <nav class="or-stops" aria-label="Stops">${M.lanes.map((l) => `<button type="button" class="or-stop is-${l.id}" data-lane="${l.id}" data-fk="lane-${l.id}" aria-pressed="${l.id === st.lane}"><b>${num(l.slips.length)}</b><span>${esc(l.name)}</span>${stuckIn(l) ? `<i aria-label="${plural(stuckIn(l), 'stuck slip')}"></i>` : ''}</button>`).join('')}</nav>
-      <div class="or-lanes">${M.lanes.map((l) => {
+      <div class="or-lanes">${M.lanes.map((l, i) => {
         const open = !l.fold || st.more.has(l.id) || !!st.q.trim(), list = open ? l.slips : l.slips.slice(0, FOLD), stuck = stuckIn(l);
-        return `<section class="or-lane is-${l.id} ${l.id === st.lane ? 'is-on' : ''}" aria-label="${esc(l.name)}">
+        return `${l.fold && !M.lanes[i - 1]?.fold ? '<div class="or-closed">' : ''}<section class="or-lane is-${l.id} ${l.id === st.lane ? 'is-on' : ''}" aria-label="${esc(l.name)}">
           <header><h2>${esc(l.name)}</h2><span class="or-n">${num(l.slips.length)}</span>${stuck ? `<span class="or-n is-stuck" aria-label="${plural(stuck, 'stuck slip')}">${num(stuck)} stuck</span>` : ''}${P.prod && !l.fold && l.slips.length ? `<button type="button" class="or-all" data-lane-all="${l.id}" data-fk="all-${l.id}">${l.slips.every((s) => st.sel.has(s.id)) ? 'Clear' : 'Select all'}</button>` : ''}</header>
           ${list.length ? `<ul class="or-cards">${list.map(cardHtml).join('')}</ul>` : '<p class="or-none">Nothing here</p>'}
           ${l.fold && l.slips.length > FOLD && !st.q.trim() ? `<button type="button" class="btn btn-sm btn-quiet" data-more="${l.id}" data-fk="more-${l.id}">${st.more.has(l.id) ? 'Show fewer' : `Show all ${num(l.slips.length)}`}</button>` : ''}
-        </section>`;
+        </section>${l.fold && !M.lanes[i + 1]?.fold ? '</div>' : ''}`;
       }).join('')}</div></div>`;
   }
   function barHtml() {
@@ -334,7 +334,9 @@ function mountBoard(el, ctx) {
     if (made) { swap(body, madeHtml()); swap(bar, ''); return; }
     const M = model();
     tools.hidden = !M.all.length;
+    const across = body.querySelector('.or-lanes')?.scrollLeft || 0;   // lanes scroll sideways inside the board on a narrow window
     swap(filters, filtersHtml(M)); swap(body, boardHtml(M)); swap(bar, barHtml());
+    if (across) { const l = body.querySelector('.or-lanes'); if (l) l.scrollLeft = across; }
   }
   const focusOn = (fk) => [...root.querySelectorAll('[data-fk]')].find((x) => x.dataset.fk === fk)?.focus({ preventScroll: true });
 
@@ -399,7 +401,15 @@ function mountBoard(el, ctx) {
       if (!all.length) return `<div class="or-nostyle"><p>${data.canRead('styles') ? 'There are no styles yet. An order needs one.' : 'Your role cannot see the style list, so an order cannot be placed from here yet. Ask production to place it.'}</p>${data.canWrite('styles') ? '<button type="button" class="btn btn-outline btn-sm" data-add-style>Add a style</button>' : ''}</div>`;
       return hits.length ? `<ul class="or-styles" aria-label="Styles">${hits.slice(0, 40).map((s) => `<li><button type="button" data-style="${s.id}"><strong>${esc(s.name)}</strong><span class="mono">${esc([s.code, s.shade].filter(Boolean).join(' · '))}</span></button></li>`).join('')}</ul>` : '<p class="or-none">No style has that name or code</p>';
     };
-    const d = drawer(`<div class="orders or-drawer"><header class="drawer-head"><div><p class="eyebrow">New order</p><h2>Place an order</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button></header>
+    const head = '<header class="drawer-head"><div><p class="eyebrow">New order</p><h2>Place an order</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button></header>';
+    if (!styles().length) {   // an order names a style: say what is missing instead of a form that cannot be sent
+      const can = data.canRead('styles');
+      const none = drawer(`<div class="orders or-drawer">${head}<div class="drawer-body"><section class="empty"><h3>${can ? 'No styles yet' : 'The style list is not open to you'}</h3><p>${can ? 'An order names a style. Add the first style, then place the order.' : 'An order names a style, and your role cannot see styles. Ask production or sales to place this order.'}</p>${data.canWrite('styles') ? '<button type="button" class="btn btn-primary" data-add-style>Add a style</button>' : ''}</section></div></div>`);
+      none.el.addEventListener('click', (e) => { if (e.target.closest('[data-add-style]')) { none.close(); ctx.openEntity('styles', { add: true }); } });
+      (none.el.querySelector('[data-add-style]') || none.el.querySelector('[data-close]')).focus();
+      return;
+    }
+    const d = drawer(`<div class="orders or-drawer">${head}
       <form class="drawer-body or-form" data-form="place" novalidate>
         <fieldset><legend class="eyebrow">What is it for</legend><div class="or-kinds">${['store', 'boutique', 'shoot', 'influencer', 'customer'].map((k) => `<label class="or-kind"><input type="radio" name="kind" value="${k}"><span><strong>${esc(KIND[k])}</strong><small>${esc(KIND_LINE[k])}</small></span></label>`).join('')}</div></fieldset>
         <div class="field"><label for="orStyleQ">Style</label><input class="input" id="orStyleQ" type="search" autocomplete="off" placeholder="Find a style by name or code" ${styles().length ? '' : 'hidden'}><div data-r="styles">${styleList()}</div></div>
@@ -409,7 +419,7 @@ function mountBoard(el, ctx) {
           <div class="field"><label for="orQty">Pieces</label><span class="or-qty"><button type="button" data-qty="-1" aria-label="Fewer pieces">−</button><input id="orQty" name="qty" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" value="1"><button type="button" data-qty="1" aria-label="More pieces">+</button></span></div>
           <div class="field"><label for="orBy">Needed by</label><input class="input" id="orBy" name="promised" type="date" min="${iso(today())}"></div>
         </div>
-        <div class="field"><span class="label" id="orPrioL">Priority</span><div class="seg or-prioseg" role="group" aria-labelledby="orPrioL">${Object.entries(PRIO).map(([id, name]) => `<button type="button" data-prio="${id}" aria-pressed="${id === f.priority}">${name}</button>`).join('')}</div></div>
+        <div class="field"><p class="eyebrow" id="orPrioL">Priority</p><div class="seg or-prioseg" role="group" aria-labelledby="orPrioL">${Object.entries(PRIO).map(([id, name]) => `<button type="button" data-prio="${id}" aria-pressed="${id === f.priority}">${name}</button>`).join('')}</div></div>
         <div class="field" data-r="reason" hidden><label for="orWhy">Why it is high priority</label><input class="input" id="orWhy" name="priorityReason" type="text" autocomplete="off"></div>
         <div class="field"><label for="orPurpose">Purpose</label><input class="input" id="orPurpose" name="purpose" type="text" autocomplete="off" placeholder="Resort lookbook"></div>
         <div class="field"><label for="orMeas">Measurements and notes</label><textarea class="input" id="orMeas" name="measurements"></textarea></div>
@@ -552,11 +562,12 @@ function mountScan(el, ctx) {
     if (!no) { say('crit', 'Nothing scanned', 'Scan the code on the slip, or type its number.'); return paint(); }
     if (!slip) { try { await data.refresh(['slips']); } catch { /* offline: the answer below still holds */ } slip = find(raw).slip; }
     if (gone) return;
-    input.value = ''; sc.ax = freshAx();
+    stopCam(); input.value = ''; sc.ax = freshAx();
     if (!slip) { sc.id = ''; say('crit', 'Not found', `No slip has the number ${no.slice(0, 30)}. Check the slip and scan again.`); paint(); return refocus(); }
     sc.id = slip.id; sc.result = null; paint();
     slipBox.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-    slipBox.querySelector('.or-act')?.focus({ preventScroll: true });
+    const acts = slipBox.querySelectorAll('.or-acts .or-act');
+    if (acts.length === 1) acts[0].focus({ preventScroll: true });   // one clear next step: Enter does it. A verdict is never one keypress away.
   }
 
   function slipHtml(s) {
@@ -613,9 +624,10 @@ function mountScan(el, ctx) {
         const det = new window.BarcodeDetector({ formats: ['qr_code'] });
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
         if (gone) { stream.getTracks().forEach((t) => t.stop()); return; }
+        const c = { stream, busy: false, timer: 0 }; cam = c;   // set before anything else waits, so leaving the screen can stop it
         video.srcObject = stream; camBox.hidden = false; btn.hidden = true;
         await video.play().catch(() => {});
-        const c = { stream, busy: false, timer: 0 }; cam = c;
+        if (cam !== c) return;
         c.timer = setInterval(async () => {
           if (c.busy || cam !== c || video.readyState < 2) return;
           c.busy = true;
