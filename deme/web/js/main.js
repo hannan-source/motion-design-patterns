@@ -9,12 +9,12 @@ import { positionById, isHead } from '../shared/org.js';
 
 // Each area of the app wears one of the shared gradients.
 export const VARIANT = {
-  home: 'services', journey: 'hll-people', org: 'about', dayplan: 'hll-ontology', dye: 'hll-trust', guide: 'hll-ai', import: 'engagement', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
+  home: 'services', journey: 'hll-people', org: 'about', dayplan: 'hll-ontology', dye: 'hll-trust', orders: 'services', channels: 'engagement', privacy: 'contact', guide: 'hll-ai', import: 'engagement', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
   masters: 'about', purchasing: 'engagement', inventory: 'industries', quality: 'hll-trust', production: 'services', b2b: 'contact', b2c: 'hll-application',
   logistics: 'hll-ai', finance: 'hll-foundation', hr: 'hll-people', projects: 'hll-ontology', marketing: 'engagement', design: 'about', admin: 'contact',
 };
 const VIEWS = {
-  home: () => import('./home.js'), journey: () => import('./journey.js'), org: () => import('./org.js'), dayplan: () => import('./dayplan.js'), dye: () => import('./dye.js'), map: () => import('./map.js'), room: () => import('./room.js'),
+  home: () => import('./home.js'), journey: () => import('./journey.js'), org: () => import('./org.js'), dayplan: () => import('./dayplan.js'), dye: () => import('./dye.js'), orders: () => import('./orders.js'), channels: () => import('./channels.js'), privacy: () => import('./privacy.js'), map: () => import('./map.js'), room: () => import('./room.js'),
   myday: () => import('./myday.js'), guide: () => import('./guide.js'), import: () => import('./smart.js'), pulse: () => import('./pulse.js'), tracker: () => import('./tracker.js'), scan: () => import('./scan.js'), gate: () => import('./gate.js'), erp: () => import('./erp.js'),
 };
 const slug = (id) => id.replace(/_/g, '-');
@@ -32,15 +32,18 @@ function menu() {
   const founder = data.user.position === 'founder' || data.user.role === 'founder';
   if (founder) top.push(['pulse', 'Founder view'], ['journey', 'My journey']);
   else { top.push(['journey', 'My journey']); if (c('admin', 'admin')) top.push(['pulse', 'Founder view']); }
-  if (c('projects', 'read')) top.push(['org', 'Work centres']);
+  if (c('projects', 'read')) top.push(['orders', 'Orders'], ['org', 'Work centres']);
   if (works) top.push(['home', 'Today'], ['map', 'Business map']);
   if (c('production', 'read') || c('b2b', 'read') || c('design', 'read')) top.push(['room', 'Production room']);
   if (c('production', 'write')) floor.push(['dayplan', 'Day plan']);
+  if (c('production', 'scan') || c('quality', 'scan')) floor.push(['slip', 'Scan a slip']);
   if (c('production', 'scan')) floor.push(['scan', 'Scan station']);
   if (c('quality', 'scan')) floor.push(['dye', 'Dye house']);
   if (c('logistics', 'write') || c('b2c', 'write') || c('production', 'write')) floor.push(['gate', 'Dispatch gate']);
   floor.push(['myday', 'My day']);
   const start = [['guide', 'Guide']];
+  if (c('marketing', 'read')) top.push(['channels', 'Channels']);
+  if (c('admin', 'admin')) start.push(['privacy', 'Privacy']);
   if (data.writable.size) start.push(['import', 'Bring in data']);
   for (const m of Object.keys(MODULES)) if (c(m, 'read')) mods.push([`m-${m}`, MODULES[m].name, m]);
   return { top, floor, mods, start };
@@ -50,6 +53,8 @@ const firstRoute = () => { const m = menu(); return (m.top[0] || m.floor[0])[0];
 function parse() {
   const h = location.hash.slice(1);
   if (h === 'm-projects') return { view: 'tracker', module: 'projects', key: 'projects', name: h };
+  // A slip's QR code and its notices link here. Whoever scans it gets the one screen for their job.
+  if (h === 'slip' || h.startsWith('slip-')) return { view: 'orders', key: 'orders', name: 'slip', slip: h.slice(5).toUpperCase() };
   if (h.startsWith('task-')) return { view: 'tracker', module: 'projects', key: 'projects', name: 'm-projects', task: h.slice(5) };   // a link from a notice or an email
   if (h.startsWith('m-') && MODULES[h.slice(2)]) return { view: 'erp', module: h.slice(2), key: h.slice(2), name: h };
   if (h.startsWith('e-') && entityById[unslug(h.slice(2))]) { const e = entityById[unslug(h.slice(2))]; return { view: 'erp', module: e.module, entity: e.id, key: e.module, name: h }; }
@@ -106,6 +111,7 @@ async function route() {
   let r = parse();
   const m = menu();
   const allowed = new Set([...m.top, ...m.floor, ...m.mods, ...m.start].map((x) => x[0]));
+  if (r && r.name === 'slip' && !allowed.has('slip') && allowed.has('orders')) r.name = 'orders';   // followers open the slip on the Orders screen
   if (!r || !(allowed.has(r.name) || (r.module && allowed.has(`m-${r.module}`)))) { location.replace(`#${firstRoute()}`); return; }
   const opts = pending; pending = {};
   const turn = ++routeTurn; // a newer navigation cancels this one
@@ -199,10 +205,10 @@ function auth(setup) {
         <h1 class="reveal">${setup ? 'Set up Deme' : 'Sign in'}</h1>
         ${setup ? `<p class="muted">Nothing has been set up yet. The first account belongs to whoever is setting the system up. ${info('The first account is the system admin: it shapes the work centres, names the person in charge of each, creates the go-live plan and invites the team. The founder is added like everyone else and opens on the Founder view, which shows the result. Nobody has to share this login.', 'First account')}</p>` : ''}
         ${setup ? '<div class="field"><label for="aName">Your name</label><input class="input" id="aName" autocomplete="name" required></div>' : ''}
-        <div class="field"><label for="aEmail">Work email</label><input class="input" id="aEmail" type="email" autocomplete="username" required></div>
-        <div class="field"><label for="aPass">Password</label><input class="input" id="aPass" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" required minlength="8">${setup ? '<span class="hint">At least 8 characters.</span>' : ''}</div>
+        ${!setup && !api.caps.passwords ? '<p class="muted">Sign in with your Deme Google account.</p>' : `        <div class="field"><label for="aEmail">Work email</label><input class="input" id="aEmail" type="email" autocomplete="username" required></div>
+        <div class="field"><label for="aPass">Password</label><input class="input" id="aPass" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" required minlength="8">${setup ? '<span class="hint">At least 8 characters.</span>' : ''}</div>`}
         <p class="error" role="alert" hidden></p>
-        <div class="row"><button class="btn btn-primary" type="submit">${setup ? 'Create the admin account' : 'Sign in'}</button>${api.caps.google ? `<a class="btn btn-outline" href="/api/auth/google/start">${G}${setup ? 'Set up with Google' : 'Sign in with Google'}</a>${info('Use your Deme Google Workspace account. People already on the team list sign in as themselves. Anyone else in the Workspace comes in, picks the position they hold, and waits for the head of that work centre to confirm it.', 'Google sign-in')}` : `<button class="btn btn-outline" type="button" id="gOff">${G}Sign in with Google</button>${info(api.mode === 'local' ? 'Google sign-in works on the live site, not in this preview: a preview has no server to check the account with Google. Once the site is live with Deme\'s Google Workspace keys, this button signs the team in with their work accounts.' : 'Google sign-in is not connected yet. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_WORKSPACE_DOMAIN to the site settings (docs/GO-LIVE.md), redeploy, and this button signs the team in with their work accounts.', 'Google sign-in')}`}</div>
+        <div class="row">${!setup && !api.caps.passwords ? '' : `<button class="btn btn-primary" type="submit">${setup ? 'Create the admin account' : 'Sign in'}</button>`}${api.caps.google ? `<a class="btn btn-outline" href="/api/auth/google/start">${G}${setup ? 'Set up with Google' : 'Sign in with Google'}</a>${info('Use your Deme Google Workspace account. People already on the team list sign in as themselves. Anyone else in the Workspace comes in, picks the position they hold, and waits for the head of that work centre to confirm it.', 'Google sign-in')}` : `<button class="btn btn-outline" type="button" id="gOff">${G}Sign in with Google</button>${info(api.mode === 'local' ? 'Google sign-in works on the live site, not in this preview: a preview has no server to check the account with Google. Once the site is live with Deme\'s Google Workspace keys, this button signs the team in with their work accounts.' : 'Google sign-in is not connected yet. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_WORKSPACE_DOMAIN to the site settings (docs/GO-LIVE.md), redeploy, and this button signs the team in with their work accounts.', 'Google sign-in')}`}</div>
         ${api.mode === 'local' ? `<p class="faint" style="font-size:12px">Preview without a server: accounts and data are kept in this browser only. ${info('Open this app from the Deme server to share data across the team. In this preview, anyone using this browser profile can read what is stored.', 'Preview mode')}</p>` : ''}
       </form>
       <div class="auth-field"><canvas aria-hidden="true"></canvas><div class="wordmark" aria-hidden="true">Deme</div></div>
@@ -223,7 +229,7 @@ function auth(setup) {
   });
   const why = { expired: 'That sign-in took too long. Try again.', google: 'Google did not confirm your account. Try again.', domain: 'Use your Deme Google Workspace account.', notlisted: 'Your Google account is not on the team list. Ask an admin to add you.' }[new URLSearchParams(location.search).get('signin')];
   if (why) { err.textContent = why; err.hidden = false; history.replaceState(null, '', location.pathname + location.hash); }
-  (setup ? $('#aName') : $('#aEmail')).focus();
+  (setup ? $('#aName') : $('#aEmail'))?.focus();
 }
 
 async function enter() {

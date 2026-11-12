@@ -13,10 +13,15 @@ The web app is published as static files. Every `/api/*` request runs one Netlif
 | 4 | Google sign-in | Google Cloud console, in Deme's Workspace: an OAuth consent screen of type **Internal**, then an **OAuth client ID** of type *Web application* with the authorised redirect URI `<PUBLIC_URL>/api/auth/google/callback` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_WORKSPACE_DOMAIN` (e.g. `deme.com`) |
 | 5 | AI reading of spreadsheets | An Anthropic API key (console.anthropic.com) | `ANTHROPIC_API_KEY` |
 | 6 | Email notices | A Resend account (resend.com) with Deme's domain verified, and an API key | `RESEND_API_KEY`, and `MAIL_FROM` such as `Deme Intelligence <intelligence@deme.com>` |
+| 7 | Shopify orders | A custom app in the Shopify admin with read access to orders | `SHOPIFY_STORE`, `SHOPIFY_TOKEN`; and for instant intake, a webhook for order payment to `<PUBLIC_URL>/api/shopify/webhook` with its secret in `SHOPIFY_WEBHOOK_SECRET` |
+| 8 | Meta ad spend | The ad account id and a system-user token with `ads_read` | `META_AD_ACCOUNT`, `META_TOKEN` |
 
-Items 4 to 6 are optional. Without Google the team signs in with email and password. Without the
+Items 4 to 8 are optional. Without Google the team signs in with email and password. Without the
 Anthropic key, "Bring in data" matches columns by name and the person corrects the rest by hand.
 Without the mail key, notices about tasks, comments and requests show in the app only.
+Without Shopify, orders come in from the Shopify export; without Meta, spend comes in from its export.
+Once everyone signs in with Google, set `PASSWORD_LOGIN=off`. `docs/SECURITY.md` lists what else to
+settle before customer data is held.
 
 Environment variables are set under **Project configuration > Environment variables**. Mark the
 database string, the Google secret and the Anthropic key as secret values. Redeploy after changing any.

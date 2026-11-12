@@ -42,6 +42,10 @@ preview link, publish on merge). The same code also runs as one Docker container
 | **Today** | What needs attention across the business, sales of the day, a getting-started checklist while lists are empty |
 | **Business map** | 3D model of suppliers, dye house, factory floor, channels and office. Places, flows, zones and parts are clickable and show live figures from the records |
 | **Production room** | Finite-capacity plan from open work orders, styles and work centres. Test a sample run, extra units, a demand jump, absences or a late fabric lot and see what moves |
+| **Orders** | One slip per made-to-order piece, from a paid online order or from an internal order placed by the store, a boutique, a shoot or sales. Everyone can see where a slip is and whether it is stuck, so nobody has to chase. Slips print with a QR code |
+| **Scan a slip** | One page for a phone: the tailor scans to start and to finish, QC scans the piece in and judges it pass, rework or reject. Each stop is stamped with the time and the person |
+| **Channels** | What each marketing channel costs and what it really brings in, set against what the channel claims |
+| **Privacy** | Find what is held on a customer, hand it over, or remove it on request |
 | **Day plan** | Tomorrow's cutting, decided the evening before: which master cuts which order, checked line by line against fabric really in the store. Issuing it sets the metres aside, makes one bundle per line and gives the fabric runner the bundling list. No slip goes out without fabric behind it |
 | **Dye house** | A phone screen for the dye house and for Deme's checker there: the lots at the dye house, and a problem reported in a few taps with photos |
 | **Scan station** | Tailors and masters scan bundles in and out; gives real minutes per piece |
@@ -106,10 +110,16 @@ were checked, or accepted on the mill's QC report, can go on a dye lot. Confirmi
 the order shipped and books the sale. A store piece scanned in counts a fit visit. Vouchers
 export as Tally import XML. Every change is in the audit trail.
 
+## Security and privacy
+
+`docs/SECURITY.md` sets out what the product does, what the hosting does, and what Deme has to do
+as a company for GDPR and India's DPDP Act.
+
 ## Not built yet
 
-- Live connections to Shopify, DHL and Tally (CSV import, manual tracking updates and XML export
-  cover them for now; `docs/TALLY-CONNECTOR.md` is the plan for Tally).
+- Live connections to DHL and Tally (manual tracking updates and XML export cover them for now;
+  `docs/TALLY-CONNECTOR.md` is the plan for Tally). Shopify orders and Meta spend are pulled in
+  when their keys are set; pushing tracking numbers back to Shopify, and a Google Ads pull, are not built.
 - Camera reading of fabric defects and barcodes. Handheld scanners work today, and tags print from the app; `docs/VISION-PLAN.md` is the plan for cameras.
 - GST and statutory payroll deductions. Settle the tax treatment with Deme's accountant first.
 - Password reset by email (an admin sets a new password under Admin > Team).

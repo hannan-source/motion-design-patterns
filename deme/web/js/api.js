@@ -41,7 +41,7 @@ const guard = async (fn) => { try { return await fn(); } catch (e) { if (e insta
 export const api = {
   get mode() { return mode; },
   /** What this copy of the server has switched on: Google sign-in, AI mapping. */
-  caps: { google: false, ai: false, mail: false },
+  caps: { google: false, passwords: true, ai: false, mail: false, shopify: false, meta: false },
   /**
    * Who is signed in, and whether the first account still has to be made. The hosted preview page
    * is marked as such when it is built and keeps its data in this browser; every other copy talks
@@ -59,7 +59,7 @@ export const api = {
     for (let i = 0; i < 3; i++) {
       try {
         const s = await http('GET', 'state');
-        api.caps.google = !!s.google; api.caps.ai = !!s.ai; api.caps.mail = !!s.mail;
+        api.caps.google = !!s.google; api.caps.passwords = s.passwords !== false; api.caps.ai = !!s.ai; api.caps.mail = !!s.mail; api.caps.shopify = !!s.shopify; api.caps.meta = !!s.meta;
         return s;
       } catch (e) {
         last = e;
@@ -97,6 +97,9 @@ export const api = {
   audit: (entity, id) => (mode === 'server' ? http('GET', `audit?${new URLSearchParams(Object.entries({ entity, id }).filter(([, v]) => v))}`) : guard(async () => local.svc.audit(me(), { entity, id }))),
   createUser: (input) => (mode === 'server' ? http('POST', 'users', input) : guard(async () => local.svc.createUser(me(), input))).then(async (u) => { await data.load(); return u; }),
   updateUser: (id, input) => (mode === 'server' ? http('PUT', `users/${id}`, input) : guard(async () => local.svc.updateUser(me(), id, input))).then(async (u) => { await data.load(); return u; }),
+  /** Bring in new orders from Shopify, or spend from Meta (live site only, when connected). `since` is YYYY-MM-DD or empty. */
+  shopifyPull: (since = '') => change(http('POST', 'shopify/pull', { since }).then((o) => ({ ...o, touched: ['shop_orders', 'slips'] }))),
+  mediaPull: (since = '') => change(http('POST', 'media/pull', { since }).then((o) => ({ ...o, touched: ['media_days'] }))),
   /** Photos and documents on a record: add (base64 `data`), list, fetch one (with its data), remove. */
   files: {
     add: (entity, id, file) => change((mode === 'server' ? http('POST', 'files', { entity, id, ...file }) : guard(async () => local.svc.addFile(me(), { entity, id, ...file }))).then((meta) => ({ ...meta, touched: [entity] }))),

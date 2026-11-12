@@ -225,9 +225,11 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
       const res = await store.run(async (db) => {
         const svc = createService(db, { actions: ACTIONS, hash: hashPassword });
         const out = await (async () => {
-        if (parts[0] === 'state') return json(200, { setupNeeded: !svc.hasUsers(), user: svc.publicUser(whoIs(db, svc, req)), google: !!google(), ai: aiReady(), mail: mailReady(), shopify: shopifyReady(env), meta: metaReady(env), product: PRODUCT });
+        if (parts[0] === 'state') return json(200, { setupNeeded: !svc.hasUsers(), user: svc.publicUser(whoIs(db, svc, req)), google: !!google(), passwords: !(env.PASSWORD_LOGIN === 'off' && google()), ai: aiReady(), mail: mailReady(), shopify: shopifyReady(env), meta: metaReady(env), product: PRODUCT });
         if (parts[0] === 'setup' && m === 'POST') { const user = await svc.setup(body); return startSession(db, req, json(200, { user }), user); }
         if (parts[0] === 'login' && m === 'POST') {
+          // Where the whole team signs in with Google, passwords can be switched off altogether.
+          if (env.PASSWORD_LOGIN === 'off' && google()) throw new UserError('Sign in with Google.', 403);
           const key = `${req.ip}|${String(body.email || '').toLowerCase()}`, a = attempts.get(key);
           if (a && a.n >= 6 && a.until > Date.now()) throw new UserError('Too many attempts. Try again in a few minutes.', 429);
           const u = svc.findUserByEmail(body.email);

@@ -34,5 +34,5 @@ const page = join(out, 'deme-erp.html');
 writeFileSync(page, `${head.trim()}\n${body.trim()}\n`);
 
 const js = (dir, as) => Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.js')).map((f) => [`${as}/${f}`, join(dir, f)]));
-const files = { ...js(join(web, 'js'), 'js'), ...js(join(root, 'shared'), 'shared'), 'vendor/three.module.min.js': join(web, 'vendor', 'three.module.min.js') };
+const files = { ...js(join(web, 'js'), 'js'), ...js(join(root, 'shared'), 'shared'), ...js(join(web, 'vendor'), 'vendor') };
 console.log(JSON.stringify({ page, files }, null, 2));

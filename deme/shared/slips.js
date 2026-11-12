@@ -255,6 +255,21 @@ export const SLIP_ACTIONS = {
       return { message: `Personal details are removed from ${n} ${n === 1 ? 'order' : 'orders'} and their slips.`, data: { orders: n } };
     },
   },
+  /** Remove customers' personal details from online orders older than a number of months: the routine that keeps old data from piling up. */
+  'privacy.sweep': {
+    module: 'admin', level: 'admin',
+    run(ctx, { months = 36 }) {
+      months = Number(months); if (!(months >= 6)) ctx.fail('Keep at least 6 months.');
+      const cut = new Date(); cut.setMonth(cut.getMonth() - months); const before = cut.toISOString().slice(0, 10);
+      const old = ctx.all('shop_orders').filter((o) => o.date && o.date < before && o.customerName && o.customerName !== 'Removed on request' && ['shipped', 'delivered', 'returned', 'cancelled'].includes(o.status));
+      if (!old.length) return { message: `No finished order older than ${months} months still carries a name.`, data: { orders: 0 } };
+      const nos = new Set(old.map((o) => String(o.orderNo).toLowerCase()));
+      for (const o of old) { Object.assign(o, { customerName: 'Removed on request', erasedOn: ctx.today }); ctx.put('shop_orders', o); }
+      for (const sl of ctx.all('slips')) if (nos.has(String(sl.orderNo).toLowerCase())) { Object.assign(sl, { customerName: 'Removed on request', measurements: sl.measurements ? 'Removed on request' : undefined }); ctx.put('slips', sl); }
+      ctx.log('shop_orders', null, 'privacy', `Routine clean-up: personal details removed from ${old.length} orders older than ${months} months`);
+      return { message: `Personal details are removed from ${old.length} ${old.length === 1 ? 'order' : 'orders'} older than ${months} months.`, data: { orders: old.length } };
+    },
+  },
 };
 
 /** When a parcel leaves, the slips of its order are dispatched and whoever asked is told. */
