@@ -9,12 +9,12 @@ import { positionById, isHead } from '../shared/org.js';
 
 // Each area of the app wears one of the shared gradients.
 export const VARIANT = {
-  home: 'services', journey: 'hll-people', org: 'about', guide: 'hll-ai', import: 'engagement', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
+  home: 'services', journey: 'hll-people', org: 'about', dayplan: 'hll-ontology', dye: 'hll-trust', guide: 'hll-ai', import: 'engagement', pulse: 'services', tracker: 'hll-ontology', map: 'industries', room: 'hll-ontology', myday: 'hll-people', scan: 'hll-foundation', gate: 'hll-ai',
   masters: 'about', purchasing: 'engagement', inventory: 'industries', quality: 'hll-trust', production: 'services', b2b: 'contact', b2c: 'hll-application',
   logistics: 'hll-ai', finance: 'hll-foundation', hr: 'hll-people', projects: 'hll-ontology', marketing: 'engagement', design: 'about', admin: 'contact',
 };
 const VIEWS = {
-  home: () => import('./home.js'), journey: () => import('./journey.js'), org: () => import('./org.js'), map: () => import('./map.js'), room: () => import('./room.js'),
+  home: () => import('./home.js'), journey: () => import('./journey.js'), org: () => import('./org.js'), dayplan: () => import('./dayplan.js'), dye: () => import('./dye.js'), map: () => import('./map.js'), room: () => import('./room.js'),
   myday: () => import('./myday.js'), guide: () => import('./guide.js'), import: () => import('./smart.js'), pulse: () => import('./pulse.js'), tracker: () => import('./tracker.js'), scan: () => import('./scan.js'), gate: () => import('./gate.js'), erp: () => import('./erp.js'),
 };
 const slug = (id) => id.replace(/_/g, '-');
@@ -35,7 +35,9 @@ function menu() {
   if (c('projects', 'read')) top.push(['org', 'Work centres']);
   if (works) top.push(['home', 'Today'], ['map', 'Business map']);
   if (c('production', 'read') || c('b2b', 'read') || c('design', 'read')) top.push(['room', 'Production room']);
+  if (c('production', 'write')) floor.push(['dayplan', 'Day plan']);
   if (c('production', 'scan')) floor.push(['scan', 'Scan station']);
+  if (c('quality', 'scan')) floor.push(['dye', 'Dye house']);
   if (c('logistics', 'write') || c('b2c', 'write') || c('production', 'write')) floor.push(['gate', 'Dispatch gate']);
   floor.push(['myday', 'My day']);
   const start = [['guide', 'Guide']];

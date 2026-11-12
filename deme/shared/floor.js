@@ -144,8 +144,9 @@ export const FLOOR_ACTIONS = {
         const wo = ctx.get('work_orders', row.workOrder);
         for (const t of row.take) {
           const roll = ctx.get('rolls', t.roll.id);
-          roll.left = round(leftOn(roll) - t.metres, 2); roll.reservedFor = roll.reservedFor || wo.id;
-          if (roll.left <= 0.05) { roll.left = 0; ctx.setStatus('rolls', roll, 'issued', `Roll ${roll.no} used up on ${wo.no}`); } else ctx.put('rolls', roll);
+          roll.left = round(leftOn(roll) - t.metres, 2);
+          // What is left on a part-used roll stays free for the next order.
+          if (roll.left <= 0.05) { roll.left = 0; roll.reservedFor = roll.reservedFor || wo.id; ctx.setStatus('rolls', roll, 'issued', `Roll ${roll.no} used up on ${wo.no}`); } else ctx.put('rolls', roll);
         }
         ctx.put('bundles', { workOrder: wo.id, pieces: row.pieces, master: row.master, metres: row.need, fromRolls: row.take.map((t) => `${t.roll.no} (${qty(t.metres)} m)`).join(', '), plan: doc.id });
         metres += row.need;

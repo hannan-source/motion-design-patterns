@@ -45,7 +45,8 @@ function pools() {
     };
   });
 }
-const openOrders = () => data.all('work_orders').filter((o) => OPEN.has(o.status) && n(o.pack) < n(o.qty));
+// Work a production vendor is making takes no in-house time until it is back for QC and packing.
+const openOrders = () => data.all('work_orders').filter((o) => OPEN.has(o.status) && n(o.pack) < n(o.qty) && !(o.madeBy === 'vendor' && n(o.finish) < n(o.qty)));
 
 /** The planning assumptions in force on this device: engine defaults with any saved numbers on top. */
 let unsaved = null; // kept in memory when this browser will not store them
@@ -82,7 +83,7 @@ export function planState(assume = planAssumptions()) {
   });
   const styleById = Object.fromEntries(styles.map((s) => [s.id, s]));
 
-  const rolls = data.all('rolls').map((r) => ({ id: r.id, fabric: r.item || '', shade: r.shade || '', metres: n(r.metres), status: r.status, reservedFor: r.reservedFor || '', dyeLot: r.dyeLot || '' }));
+  const rolls = data.all('rolls').map((r) => ({ id: r.id, fabric: r.item || '', shade: r.shade || '', metres: n(r.reservedFor ? r.metres : (r.left ?? r.metres)), status: r.status, reservedFor: r.reservedFor || '', dyeLot: r.dyeLot || '', away: !!r.heldAt }));
   const threads = data.all('items').filter((i) => i.kind === 'thread').map((i) => ({ shade: i.shade || '', cones: n(i.onHand) }));
 
   // Fabric on its way back from the dyer, by lot.
@@ -94,7 +95,8 @@ export function planState(assume = planAssumptions()) {
   }).sort((a, b) => a.readyDay - b.readyDay);
 
   // Free stock is handed out in due-date order, so two orders cannot both count on the same roll.
-  const free = new Map(rolls.filter((r) => !r.reservedFor && (r.status === 'dyed' || r.status === 'passed')).map((r) => [r, r.metres]));
+  // Fabric still lying at the dye house, passed but not yet dyed and back, cannot be cut from.
+  const free = new Map(rolls.filter((r) => !r.reservedFor && !r.away && r.metres > 0 && (r.status === 'dyed' || r.status === 'passed')).map((r) => [r, r.metres]));
   const missing = { fabric: [] };
   const orders = openOrders()
     .map((o) => ({
