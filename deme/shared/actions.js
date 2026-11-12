@@ -88,7 +88,7 @@ function gateShopify(ctx, parcel, note, event) {
     ctx.setStatus('parcels', parcel, 'in_transit');
     if (!order) return { direction: 'out', message: `Parcel ${parcel.barcode} is scanned out. No Shopify order ${parcel.ref} was found, so no sale was booked.` };
     ctx.setStatus('shop_orders', order, 'shipped');
-    const sale = ctx.voucher({ type: 'Sales', party: 'Shopify', dr: 'Shopify Clearing', cr: 'Online Sales', amount: rupeesOf(ctx, order), narration: `Shopify order ${order.orderNo}${order.customerName ? ` for ${order.customerName}` : ''}`, ref: order.orderNo });
+    const sale = ctx.voucher({ type: 'Sales', party: 'Shopify', dr: 'Shopify Clearing', cr: 'Online Sales', amount: rupeesOf(ctx, order), narration: `Shopify order ${order.orderNo}`, ref: order.orderNo });
     return { direction: 'out', message: `Order ${order.orderNo} is on its way.${sale ? ` The sale of ${rupees(rupeesOf(ctx, order))} is booked.` : ''}` };
   }
   if (parcel.status === 'at_factory') ctx.fail(`This parcel is already scanned in as a return. Look under Returns for order ${parcel.ref}.`);
@@ -412,6 +412,8 @@ export const ACTIONS = {
       if (!(doc.total > 0)) ctx.fail('This invoice has no value. Add lines with prices, then post again.');
       const foreign = !!doc.currency && doc.currency !== 'INR';
       const cr = !foreign && customer.kind === 'store' ? 'Store Sales' : 'Export Sales';
+      // An invoice in another currency is booked at its own rate, or the newest rate on record; never at one for one.
+      if (foreign && !(doc.fx > 1)) { const rate = ctx.toInr(1, doc.currency, doc.date); if (!rate) ctx.fail(`Enter the rupees per ${doc.currency} on this invoice, or add an exchange rate under Finance, then post again.`); doc.fx = rate; }
       const amount = doc.total * (doc.fx || 1);
       ctx.voucher({ type: 'Sales', party: customer.name, dr: ctx.ledgerOf('customers', customer.id), cr, amount, narration: `Invoice ${doc.no} to ${customer.name}${foreign ? `: ${doc.currency} ${qty(doc.total)} at ₹${qty(doc.fx || 1)}` : ''}`, ref: doc.no });
       ctx.setStatus('invoices', doc, 'posted');
@@ -734,4 +736,7 @@ import { GOLIVE_ACTIONS } from './golive.js';
 import { FLOOR_ACTIONS, openClaim, papersMissing } from './floor.js';
 import { SLIP_ACTIONS, slipsDispatched } from './slips.js';
 import { COLLAB_ACTIONS } from './collab.js';
+const checkAddsUp = { run(ctx, a, b) { const d = b || a; const n = (v) => Number(v) || 0; if (n(d.passed) + n(d.rework) + n(d.rejected) > n(d.checked)) ctx.fail(`${n(d.checked)} pieces were checked, so passed, rework and rejected cannot add up to ${n(d.passed) + n(d.rework) + n(d.rejected)}.`); } };
+ACTIONS['hook.created.qc_checks'] = { run: (ctx, _p, doc) => checkAddsUp.run(ctx, doc) };
+ACTIONS['hook.updated.qc_checks'] = { run: (ctx, _old, doc) => checkAddsUp.run(ctx, doc) };
 Object.assign(ACTIONS, GOLIVE_ACTIONS, COLLAB_ACTIONS, FLOOR_ACTIONS, SLIP_ACTIONS);

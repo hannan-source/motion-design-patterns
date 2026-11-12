@@ -46,6 +46,7 @@ export const COLLAB_ACTIONS = {
     module: 'projects', level: 'read',
     run(ctx, { id, text }) {
       const task = ctx.get('tasks', id) || ctx.fail('That task no longer exists.');
+      if (!ctx.sees('tasks', task)) ctx.fail('That task no longer exists.', 404);   // a project limited to its work centre is closed to others for writing too
       text = String(text || '').trim(); if (!text) ctx.fail('Write the comment first.');
       if (text.length > 4000) ctx.fail('Keep a comment under 4,000 characters.');
       const c = ctx.put('comments', { task: id, text, by: ctx.user.id });
@@ -65,6 +66,7 @@ export const COLLAB_ACTIONS = {
       title = String(title || '').trim(); if (!title) ctx.fail('Say what you need.');
       if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) ctx.fail('Give the date as a day.');
       let p = project ? ctx.get('projects', project) : ctx.all('projects').find((x) => x.kind === 'requests');
+      if (project && (!p || !ctx.sees('projects', p))) ctx.fail('That project no longer exists.', 404);
       if (!p) p = ctx.put('projects', { name: REQUESTS, kind: 'requests', access: 'everyone', start: ctx.today, about: 'What one work centre has asked of another. Each request goes to the head of the work centre it is addressed to.' });
       const t = ctx.put('tasks', { project: p.id, title, centre: c.id, assignee: c.head || undefined, start: ctx.today, due: due || undefined, notes: String(notes || '').trim() || undefined });
       if (c.head) ctx.notify(c.head, `${ctx.user.name} asked ${c.name}: ${short(title)}`, link(t));

@@ -61,6 +61,9 @@ function ring(size, r, width, parts, cls = '') {
   return `<svg class="pl-ring ${cls}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle class="pl-ring-track" cx="${c}" cy="${c}" r="${r}" fill="none" stroke-width="${width}"/>${arcs}`;
 }
 
+// What an order is worth in rupees. One in another currency counts at its stated rupee value, and not at all until a rate is on record.
+const rupeesOf = (o) => (o.currency && o.currency !== 'INR' ? Number(o.amountInr) || 0 : Number(o.amount) || 0);
+
 export function mount(el, ctx) {
   let planMod = null, alive = true, log = null, spark = null;
 
@@ -422,7 +425,7 @@ export function mount(el, ctx) {
     const inv = rows('invoices').filter((i) => i.status === 'posted' || i.status === 'paid');
     spark = null;
     if (!shop.length && !store.length && !inv.length) return block(5, title, about, quiet('Appears when Shopify or store orders exist'));
-    const lines = [...shop, ...store].map((o) => ({ date: o.date, amount: Number(o.amount) || 0 }));
+    const lines = [...shop, ...store].map((o) => ({ date: o.date, amount: rupeesOf(o) }));
     const days = [];
     for (let i = DAYS - 1; i >= 0; i--) { const d = today(); d.setDate(d.getDate() - i); const date = iso(d); const mine = lines.filter((l) => l.date === date); days.push({ date, d, orders: mine.length, amount: total(mine, (l) => l.amount) }); }
     const max = Math.max(...days.map((d) => d.amount), 1), W = (DAYS - 1) * 20, Hh = 72;
@@ -431,7 +434,7 @@ export function mount(el, ctx) {
     const now = days[DAYS - 1];
     spark = days.map((d) => `${DOW[d.d.getDay()]} ${fmtDate(d.d)}: ${inr(d.amount)}, ${plural(d.orders, 'order')}`);
     const month = T.slice(0, 7);
-    const parts = [canShop && ['Shopify', total(shop.filter((o) => String(o.date).startsWith(month)), (o) => o.amount)], canStore && ['Store', total(store.filter((o) => String(o.date).startsWith(month)), (o) => o.amount)],
+    const parts = [canShop && ['Shopify', total(shop.filter((o) => String(o.date).startsWith(month)), (o) => rupeesOf(o))], canStore && ['Store', total(store.filter((o) => String(o.date).startsWith(month)), (o) => rupeesOf(o))],
       canInv && ['B2B invoiced', total(inv.filter((i) => String(i.date).startsWith(month)), (i) => (Number(i.total) || 0) * (Number(i.fx) || 1))]].filter(Boolean);
     const sum = total(parts, (p) => p[1]);
     return block(5, title, about, `

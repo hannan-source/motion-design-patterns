@@ -106,7 +106,7 @@ export const SLIP_ACTIONS = {
   },
   /** QC scans the slip when the piece reaches the table. */
   'slip.qcIn': {
-    module: ['quality', 'production'], level: 'scan',
+    module: ['quality', 'production'], level: 'write',   // QC, or whoever runs the floor; never the tailor, never an outside login
     run(ctx, { code }) {
       const s = find(ctx, code);
       if (s.status === 'qc') return { message: `Slip ${s.no} is already at QC.`, data: { slip: s.id, no: s.no, status: 'qc' } };
@@ -117,7 +117,7 @@ export const SLIP_ACTIONS = {
   },
   /** QC's verdict: pass, back for rework (which step, and why), or rejected. */
   'slip.qc': {
-    module: ['quality', 'production'], level: 'scan',
+    module: ['quality', 'production'], level: 'write',
     run(ctx, { code, result, reason, note }) {
       const s = find(ctx, code);
       if (!['qc', 'stitched'].includes(s.status)) ctx.fail(`Slip ${s.no} is not at QC.`);
@@ -174,6 +174,7 @@ export const SLIP_ACTIONS = {
       const have = new Map(ctx.all('shop_orders').map((o) => [String(o.orderNo).toLowerCase(), o]));
       let added = 0, slips = 0, held = 0, unmatched = 0;
       for (const o of orders) {
+        if (!o || typeof o !== 'object') continue;
         const orderNo = String(o.orderNo || '').trim(); if (!orderNo) continue;
         const known = have.get(orderNo.toLowerCase());
         if (known) { if (o.shipped && ['new', 'in_production', 'packed'].includes(known.status)) ctx.setStatus('shop_orders', known, 'shipped'); continue; }
@@ -214,6 +215,7 @@ export const SLIP_ACTIONS = {
       const CH = ['Meta', 'Google', 'Email', 'Influencer', 'Affiliate', 'Other'];
       let added = 0, changed = 0;
       for (const r of rows) {
+        if (!r || typeof r !== 'object') ctx.fail('A line is empty. Send each day as a record.');
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date))) ctx.fail(`A line has no date: ${short(JSON.stringify(r), 80)}`);
         const channel = CH.find((c) => same(c, r.channel)) || 'Other', currency = CURRENCIES.includes(r.currency) ? r.currency : 'INR', spend = Number(r.spend) || 0;
         const line = { date: r.date, channel, campaign: String(r.campaign || '').slice(0, 120), spend, currency, spendInr: ctx.toInr(spend, currency, r.date) ?? undefined, impressions: Number(r.impressions) || 0, clicks: Number(r.clicks) || 0, purchases: Number(r.purchases) || 0, revenue: Number(r.revenue) || 0, from: from || 'Import' };
@@ -236,7 +238,7 @@ export const SLIP_ACTIONS = {
       const slips = ctx.all('slips').filter((s) => hit(s) || nos.has(s.orderNo));
       const returns = ctx.all('returns').filter((r) => orders.some((o) => o.id === r.order));
       const parcels = ctx.all('parcels').filter((p) => nos.has(p.ref));
-      ctx.log('shop_orders', null, 'privacy', `${ctx.user.name} looked up what is held on "${short(q, 40)}"`);
+      ctx.log('shop_orders', null, 'privacy', `${ctx.user.name} looked up what is held on a customer (${orders.length} ${orders.length === 1 ? 'order' : 'orders'} found)`);
       return { message: `${orders.length} ${orders.length === 1 ? 'order' : 'orders'} and ${slips.length} ${slips.length === 1 ? 'slip' : 'slips'} found.`, data: { orders, slips, returns, parcels } };
     },
   },
@@ -251,6 +253,8 @@ export const SLIP_ACTIONS = {
       for (const o of ctx.all('shop_orders')) if (set.has(String(o.orderNo).toLowerCase())) { Object.assign(o, { customerName: 'Removed on request', erasedOn: ctx.today }); ctx.put('shop_orders', o); n++; }
       for (const s of ctx.all('slips')) if (set.has(String(s.orderNo).toLowerCase())) { Object.assign(s, { customerName: 'Removed on request', measurements: s.measurements ? 'Removed on request' : undefined }); ctx.put('slips', s); }
       for (const p of ctx.all('parcels')) if (set.has(String(p.ref).toLowerCase()) && p.dest) { p.dest = p.dest.split(',').pop().trim(); ctx.put('parcels', p); }
+      // Vouchers written before names were kept out of the accounts may still carry one.
+      for (const v of ctx.all('vouchers')) if (set.has(String(v.ref).toLowerCase()) && / for .+$/.test(v.narration || '')) { v.narration = v.narration.replace(/ for .+$/, ''); ctx.put('vouchers', v); }
       ctx.log('shop_orders', null, 'privacy', `Personal details removed from ${n} ${n === 1 ? 'order' : 'orders'}: ${short(reason, 120)}`);
       return { message: `Personal details are removed from ${n} ${n === 1 ? 'order' : 'orders'} and their slips.`, data: { orders: n } };
     },

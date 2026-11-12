@@ -152,3 +152,11 @@ test('only an admin creates the go-live plan; a team member cannot', () => {
     assert.ok(s2.act(staff, 'task.ask', { payload: { centre: s2.list(staff, 'work_centres')[0].id, title: 'Where do I sit?' } }).data.task);
   });
 });
+
+test('a project limited to its work centre is closed to others for writing too', () => {
+  const p = svc.list(jason, 'projects').find((x) => x.access === 'centre');
+  const t = svc.list(jason, 'tasks').find((x) => x.project === p.id);
+  assert.throws(() => svc.act(nidhi, 'task.comment', { payload: { id: t.id, text: 'peeking' } }), /no longer exists/);
+  assert.throws(() => svc.act(nidhi, 'task.ask', { payload: { centre: centre('production').id, title: 'Sneaky', project: p.id } }), /no longer exists/);
+  assert.equal(svc.act(ravi, 'task.comment', { payload: { id: t.id, text: 'On it' } }).message, null, 'its own work centre still can');
+});

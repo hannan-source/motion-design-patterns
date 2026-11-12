@@ -36,7 +36,7 @@ export function titleOf(entity, doc) {
 
 const modulesFor = (e) => [e.module, ...(e.alsoWrite || [])];
 // `open` record types (the organisation itself) can be read by anyone who is signed in.
-const canRead = (user, e) => (!!e.open && !!user) || modulesFor(e).some((m) => can(user, m, 'read'));
+const canRead = (user, e) => (!!e.open && !!user && !ROLES[user.role]?.outside) || modulesFor(e).some((m) => can(user, m, 'read'));
 const canWrite = (user, e) => !e.readonly && (can(user, e.module, e.level || 'write') || (e.alsoWrite || []).some((m) => can(user, m, 'write')));
 
 export function createService(db, { actions = {}, hash = null } = {}) {
@@ -136,7 +136,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
         const cols = f.cols.map(([k, l, type, o = {}]) => ({ k, label: l, type, ...o }));
         return v.map((row) => { const out = {}; for (const c of cols) { const x = coerce(c, row[c.k], `${label}: ${c.label}`); if (x !== undefined) out[c.k] = x; } return out; }).filter((r) => Object.keys(r).length);
       }
-      default: return String(v).trim();
+      default: { const t = String(v).trim(), max = f.type === 'long' ? 5000 : 300; if (t.length > max) fail(`${label} is too long. Keep it under ${max} characters.`); return t; }
     }
   }
   function resolveRef(refEntity, v, label) {
@@ -191,6 +191,8 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       notify: (to, text, link) => notify(user, to, text, link, touched),
       /** May the person doing this change that record? */
       may: (entityId, doc) => mayChange(user, ent(entityId), doc),
+      /** May the person doing this see that record at all? */
+      sees: (entityId, doc) => visible(user, ent(entityId), doc),
       why: (entityId) => RULES[entityId]?.why || 'Your role cannot change this.',
       handOver, seedOrg, centreByKey, toInr,
       /** Does the person doing this hold that level on the module? */
@@ -241,6 +243,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       return user;
     },
     listUsers(user) {
+      if (ROLES[user.role]?.outside) return db.all('users').filter((u) => u.id === user.id).map(publicUser);
       const full = isAdmin(user), cs = centres();
       // Everyone sees who is who and where. A request to join is shown to those who can answer it.
       return db.all('users').map((u) => (full ? publicUser(u) : { id: u.id, name: u.name, role: u.role, active: u.active !== false, position: u.position || '', centre: u.centre || '', station: u.station || '', pending: u.pending && (u.id === user.id || (positionById[u.pending.position]?.approve === 'head' && isHead(cs, user, u.pending.centre || '-'))) ? u.pending : null }));
@@ -425,6 +428,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
     /** Run a business action. For record actions pass the entity and id; scan and self-service actions have neither. */
     act(user, actionId, { entity: entityId, id, payload = {} } = {}) {
       const def = actions[actionId] || fail(`Unknown action: ${actionId}`, 404);
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
       let e = null, btn = null, doc = null;
       if (entityId) {
         e = ent(entityId); btn = (e.actions || []).find((a) => a.id === actionId) || fail('That action does not apply here.', 404);

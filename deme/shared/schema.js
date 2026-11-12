@@ -62,7 +62,8 @@ export const ROLES = {
   marketing: { name: 'Marketing', perms: { marketing: 'write', projects: 'write', b2c: 'read' } },
   design: { name: 'Design', perms: { design: 'write', projects: 'write', purchasing: 'write', masters: 'read', production: 'read' } },
   hr_admin: { name: 'HR admin', perms: { hr: 'admin', projects: 'write' } },
-  dyer: { name: 'Dye house (outside)', perms: { quality: 'scan' } },
+  // `outside`: not a member of the company. Sees only what its own screen hands it.
+  dyer: { name: 'Dye house (outside)', outside: true, perms: { quality: 'scan' } },
   staff: { name: 'Team member', perms: { projects: 'write' } },
 };
 
@@ -237,7 +238,7 @@ export const ENTITIES = [
     fields: [['customer', 'Customer', 'ref', { ref: 'customers', req: true, list: true }], ['customerPO', 'Customer PO no.', 'text', { list: true }], ['endBuyer', 'End buyer', 'text', { list: true, hint: 'When the PO comes through another company' }], ['date', 'Order date', 'date', { def: 'today' }], ['shipBy', 'Ship by', 'date', { req: true, list: true }], ['currency', 'Currency', 'select', { def: 'USD', options: opt('INR', 'USD', 'GBP', 'EUR', 'AED', 'AUD') }],
       ['lines', 'Lines', 'lines', { req: true, cols: [['style', 'Style', 'ref', { ref: 'styles' }], ['qty', 'Pieces', 'number', {}], ['price', 'Price', 'money', {}], ['vendor', 'Made by (empty for in-house)', 'ref', { ref: 'suppliers', filter: { kind: 'maker' } }]] }], ['total', 'Total', 'money', { ro: true, list: true }], ['notes', 'Notes', 'long', {}]],
     actions: [{ id: 'so.confirm', label: 'Confirm and raise work orders', when: ['draft'] }, { id: 'so.invoice', label: 'Raise invoice', when: ['confirmed', 'shipped'] }, { id: 'so.cancel', label: 'Cancel', when: ['draft', 'confirmed'], level: 'admin' }] },
-  { id: 'invoices', module: 'b2b', name: 'Invoices', one: 'Invoice', no: 'INV', title: 'no',
+  { id: 'invoices', module: 'b2b', name: 'Invoices', one: 'Invoice', no: 'INV', title: 'no', alsoWrite: ['finance'],
     info: 'Posting an invoice writes the sales voucher in rupees at the exchange rate given and opens the receivable. Recording a payment writes the receipt.',
     statuses: S(['draft', 'Draft'], ['posted', 'Posted', 'info'], ['paid', 'Paid', 'ok']),
     fields: [['customer', 'Customer', 'ref', { ref: 'customers', req: true, list: true }], ['salesOrder', 'Sales order', 'ref', { ref: 'sales_orders', list: true }], ['date', 'Date', 'date', { def: 'today', list: true }], ['dueDate', 'Due', 'date', { list: true }],

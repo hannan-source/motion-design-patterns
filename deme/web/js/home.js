@@ -19,6 +19,9 @@ const total = (arr, f) => arr.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const canOpen = (entity) => data.can(data.entity(entity).module, 'read');
 const canGate = () => data.can('logistics', 'write') || data.can('b2c', 'write') || data.can('production', 'write');
 
+// What an order is worth in rupees. One in another currency counts at its stated rupee value, and not at all until a rate is on record.
+const rupeesOf = (o) => (o.currency && o.currency !== 'INR' ? Number(o.amountInr) || 0 : Number(o.amount) || 0);
+
 export function mount(el, ctx) {
   let goes = [];        // what each "needs attention" row opens, by row index
   let chart = null;     // the days drawn in the sales chart, for its tooltip
@@ -46,7 +49,7 @@ export function mount(el, ctx) {
     }
     if (data.canRead('shop_orders')) {
       const mine = data.all('shop_orders').filter((o) => o.date === T && o.status !== 'cancelled');
-      tile('Shopify orders today', num(mine.length), inr(total(mine, (o) => o.amount)));
+      tile('Shopify orders today', num(mine.length), inr(total(mine, (o) => rupeesOf(o))));
     }
     if (data.canRead('bills')) {
       const unpaid = data.all('bills').filter((b) => b.status !== 'paid');
@@ -117,7 +120,7 @@ export function mount(el, ctx) {
     if (!canShop && !canStore) return '';
     const shop = canShop ? data.all('shop_orders').filter((o) => o.status !== 'cancelled') : [];
     const store = canStore ? data.all('store_orders') : [];
-    const lines = [...shop.map((o) => ({ date: o.date, amount: Number(o.amount) || 0, style: o.style, qty: Number(o.qty) || 1 })), ...store.map((o) => ({ date: o.date, amount: Number(o.amount) || 0, style: o.style, qty: 1 }))];
+    const lines = [...shop.map((o) => ({ date: o.date, amount: rupeesOf(o), style: o.style, qty: Number(o.qty) || 1 })), ...store.map((o) => ({ date: o.date, amount: rupeesOf(o), style: o.style, qty: 1 }))];
 
     const dates = [];
     for (let i = DAYS - 1; i >= 0; i--) { const d = today(); d.setDate(d.getDate() - i); dates.push(iso(d)); }
@@ -127,7 +130,7 @@ export function mount(el, ctx) {
     const max = peak > 0 ? (lead <= 1 ? 1 : lead <= 2 ? 2 : lead <= 5 ? 5 : 10) * p10 : 0;
     chart = max ? { days } : null;
 
-    const stat = (label, list) => { const mine = list.filter((o) => o.date === T); return `<div><p class="eyebrow">${esc(label)}</p><p class="hm-big">${esc(inr(total(mine, (o) => o.amount)))}</p><p class="hm-note">${esc(plural(mine.length, 'order'))}</p></div>`; };
+    const stat = (label, list) => { const mine = list.filter((o) => o.date === T); return `<div><p class="eyebrow">${esc(label)}</p><p class="hm-big">${esc(inr(total(mine, (o) => rupeesOf(o))))}</p><p class="hm-note">${esc(plural(mine.length, 'order'))}</p></div>`; };
 
     const styles = new Map();
     for (const l of lines.filter((x) => x.date === T)) { const s = styles.get(l.style) || { pieces: 0, amount: 0 }; s.pieces += l.qty; s.amount += l.amount; styles.set(l.style, s); }

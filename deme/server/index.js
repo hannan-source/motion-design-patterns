@@ -45,7 +45,7 @@ export function createApp({ dbFile = process.env.DEME_DB || join(root, 'data', '
   }
 
   async function staticFile(req, res, url) {
-    let p = decodeURIComponent(url.pathname);
+    let p; try { p = decodeURIComponent(url.pathname); } catch { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Bad address'); }
     // Only two folders are ever served: web/ and shared/. Anything that resolves outside them is refused.
     const shared = p.startsWith('/shared/');
     const base = join(root, shared ? 'shared' : 'web');

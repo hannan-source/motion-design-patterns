@@ -36,8 +36,10 @@ function menu() {
   if (works) top.push(['home', 'Today'], ['map', 'Business map']);
   if (c('production', 'read') || c('b2b', 'read') || c('design', 'read')) top.push(['room', 'Production room']);
   if (c('production', 'write')) floor.push(['dayplan', 'Day plan']);
-  if (c('production', 'scan') || c('quality', 'scan')) floor.push(['slip', 'Scan a slip']);
-  if (c('production', 'scan')) floor.push(['scan', 'Scan station']);
+  // The scan screens are for people who work the floor: tailors (scan level), those who run it, and QC. Not for everyone who can merely look at Production.
+  const onFloor = data.level('production') === 'scan' || c('production', 'write');
+  if (onFloor || c('quality', 'write')) floor.push(['slip', 'Scan a slip']);
+  if (onFloor) floor.push(['scan', 'Scan station']);
   if (c('quality', 'scan')) floor.push(['dye', 'Dye house']);
   if (c('logistics', 'write') || c('b2c', 'write') || c('production', 'write')) floor.push(['gate', 'Dispatch gate']);
   floor.push(['myday', 'My day']);

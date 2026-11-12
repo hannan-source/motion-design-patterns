@@ -159,3 +159,35 @@ test('Shopify and Meta through the API: a pull, and a webhook that must be signe
   assert.ok(!JSON.stringify(kept).includes('dia@example.com') && !JSON.stringify(kept).includes('Sea Road'), 'no email or address is kept');
   assert.equal(fromShopifyWebhook(order).lines[0].variant, 'S');
 });
+
+test('what the smoke test found stays fixed', async () => {
+  const dyer = add('suppliers', { name: 'Test Dye House', kind: 'dyer' });
+  const outside = svc.getUser((await svc.createUser(admin, { name: 'Outside desk', email: 'desk@dye.test', password: 'correct-horse', position: 'dyehouse', supplier: dyer.id })).id);
+  const one = run('order.place', { kind: 'store', style: shirt.id, qty: 1, promised: '2026-12-01' }, sales).data.slips[0];
+  act('slip.assign', 'slips', one.id, { master: 'Master Salim' }, manager); act('slip.cut', 'slips', one.id, {}, manager);
+  run('slip.scan', { code: one.no }, tailor); run('slip.scan', { code: one.no }, tailor);
+  // the tailor who stitched it, and an outside login, cannot judge it
+  for (const who of [tailor, outside]) { assert.throws(() => run('slip.qcIn', { code: one.no }, who), /cannot do this/); assert.throws(() => run('slip.qc', { code: one.no, result: 'pass' }, who), /cannot do this/); }
+  // an outside login reads nothing it was not handed, and sees no one but itself
+  assert.deepEqual(svc.readable(outside), []);
+  assert.deepEqual(svc.listUsers(outside).map((u) => u.id), [outside.id]);
+  // a missing payload is an empty one, not a crash; a bad row is refused with a message
+  assert.throws(() => svc.act(tailor, 'slip.scan', { payload: null }), /Scan the code on the slip/);
+  assert.throws(() => run('media.ingest', { rows: [null] }, marketing), /A line is empty/);
+  assert.equal(run('shopify.ingest', { orders: [null, 5] }).message, 'Nothing new.');
+  // a foreign invoice is never booked one for one
+  const buyer = add('customers', { name: 'Synthetic Buyer', kind: 'b2b', currency: 'GBP' });
+  const inv = add('invoices', { customer: buyer.id, currency: 'GBP', lines: [{ style: shirt.id, qty: 10, price: 50 }] });
+  assert.throws(() => act('inv.post', 'invoices', inv.id), /Enter the rupees per GBP/);
+  const usd = add('invoices', { customer: buyer.id, currency: 'USD', lines: [{ style: shirt.id, qty: 10, price: 50 }] });
+  assert.match(act('inv.post', 'invoices', usd.id).message, /₹42,000/, 'the rate on record is used');
+  // the accounts can post an invoice
+  const fin = await person('Asha', 'receivables');
+  svc.update(fin, 'invoices', inv.id, { fx: 105 }); assert.equal(act('inv.post', 'invoices', inv.id, {}, fin).doc.status, 'posted');
+  // a check cannot pass more than it checked; text has a sensible length
+  const wo = add('work_orders', { channel: 'D2C', style: shirt.id, qty: 10, due: '2026-12-01' });
+  assert.throws(() => add('qc_checks', { workOrder: wo.id, stage: 'final', checked: 5, passed: 9 }), /cannot add up to 9/);
+  assert.throws(() => add('items', { code: 'X'.repeat(400), name: 'Too long', kind: 'trim', unit: 'pcs' }), /too long/);
+  // no name reaches the accounts: the sale's narration carries the order number only
+  assert.ok(svc.list(admin, 'vouchers').filter((v) => /^Shopify order/.test(v.narration)).every((v) => !/ for /.test(v.narration)));
+});

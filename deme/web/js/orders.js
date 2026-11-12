@@ -54,9 +54,9 @@ const recall = (key, fallback) => { try { return JSON.parse(sessionStorage.getIt
 function perms() {
   const c = data.can, prod = c('production', 'write');
   return {
-    prod, tailor: c('production', 'scan') && !c('production', 'read'), qc: c('quality', 'scan'),
+    prod, tailor: c('production', 'scan') && !c('production', 'read'), qc: c('quality', 'write'),
     fabric: prod || c('inventory', 'write'), pack: prod || c('logistics', 'write') || c('b2c', 'write'), details: prod || c('b2c', 'write'),
-    cancel: c('production', 'admin'), place: c('projects', 'read'), shop: c('b2c', 'write'), scan: c('production', 'scan') || c('quality', 'scan'),
+    cancel: c('production', 'admin'), place: c('projects', 'read'), shop: c('b2c', 'write'), scan: c('production', 'scan') || c('quality', 'write'),
   };
 }
 
