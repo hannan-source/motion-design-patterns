@@ -137,3 +137,6 @@
   .map .map-tour { left: var(--gutter-l); right: var(--gutter-r); width: auto; transform: none; bottom: auto; top: 10px; }
   .map .map-tour p { font-size: 14.5px; }
 }
+
+/* A figure that opens the records behind it */
+.map .metrics dd .link { font: inherit; font-weight: 500; text-align: right; }

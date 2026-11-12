@@ -7,7 +7,7 @@ import { info, esc, inr, num, fmtDate, fmtStamp, $ } from './ui.js';
 import { mountField } from './fx.js';
 import { FUNCTIONS, TRACKS } from '../shared/golive.js';
 import { STAGES, STAGE_NAMES } from '../shared/schema.js';
-import { iso, today, workdayIndex } from '../shared/util.js';
+import { iso, today, workdayIndex, addWorkdays, fmtDay } from '../shared/util.js';
 
 const ARROW = '<svg class="pl-arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const TICK = '<svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -20,6 +20,8 @@ const ICONS = {
 const icon = (k) => `<svg class="pl-ico" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 
 const DAYS = 14;
+const LOSS_LEDGER = 'Fabric Loss: Post-Dye Defects';   // where a write-off is posted
+const CHECKED = [['mill', 'On the mill\'s report'], ['dyehouse', 'By Deme at the dye house'], ['store', 'By Deme at the store']];
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const TRACK_IDS = new Set(TRACKS.map((t) => t[0]));
 const FN_NAME = Object.fromEntries(FUNCTIONS);
@@ -254,13 +256,14 @@ export function mount(el, ctx) {
   function fabricHtml() {
     if (!can('rolls')) return '';
     const title = 'Fabric pipeline', rolls = data.all('rolls');
-    const about = 'Where every metre of fabric on record stands now, by the status of its roll. The thickness of the band at each stage is the metres there. Rejected at inspection (including rolls already returned to the mill) and failed after dyeing drop off the line. Money lost after dyeing is the metres that failed times the fabric cost plus the dyeing cost per metre.';
+    const about = 'Where every metre of fabric on record stands now, by the status of its roll. The thickness of the band at each stage is the metres there. Fabric waiting to be checked or dyed may be lying at the dye house, where the mill delivers it, or in the store. Fabric that is turned down, before or after dyeing, drops off the line and goes back to the supplier as a claim. The figure at the top is what suppliers still owe on open claims.';
     if (!rolls.length) return block(8, title, about, quiet('Appears when fabric rolls are received'));
     const at = (...statuses) => { const mine = rolls.filter((r) => statuses.includes(r.status)); return { m: total(mine, (r) => r.metres), n: mine.length }; };
     const stages = FABRIC.map(([s, name, long]) => ({ name, long, ...at(s) }));
-    const drops = [{ from: 0, name: 'Rejected', long: 'Rejected at inspection', ...at('rejected', 'returned') }, { from: 2, name: 'Failed after dyeing', long: 'Failed after dyeing', ...at('dye_reject') }];
+    const drops = [{ from: 0, name: 'Turned down', long: 'Turned down, the mill answers for it', ...at('rejected', 'returned') }, { from: 2, name: 'Failed at dyeing', long: 'Failed at dyeing, the dye house or nobody answers for it', ...at('dye_reject') }];
     const all = total(rolls, (r) => r.metres), max = Math.max(...stages.map((s) => s.m), ...drops.map((d) => d.m), 1);
-    const lost = total(rolls.filter((r) => r.status === 'dye_reject'), (r) => { const item = can('items') ? data.get('items', r.item) : null; return (Number(r.metres) || 0) * ((Number(item?.cost) || 0) + (Number(item?.dyeCost) || 0)); });
+    const claims = claimsModel();
+    const held = (status) => total(rolls.filter((r) => r.status === status && r.heldAt), (r) => r.metres);
 
     // 500 wide, stretched to the block; every thickness runs top to bottom so stretching keeps it true.
     const H = 172, YC = 44, TOP = 72, X = (i) => 50 + i * 100;
@@ -276,15 +279,104 @@ export function mount(el, ctx) {
       const t = h(d.m), y0 = YC + h(stages[d.from].m) / 2 + 3 + t / 2, y1 = H - 3 - t / 2;
       svg += `<path class="pl-pipe-drop" d="${link(X(d.from) + 5, y0 - t / 2, y0 + t / 2, X(d.from + 1) - 5, y1 - t / 2, y1 + t / 2)}" style="fill:var(--crit)"/><rect class="pl-pipe-node" x="${X(d.from + 1) - 3}" y="${(y1 - t / 2).toFixed(1)}" width="6" height="${t.toFixed(1)}" rx="1" style="fill:var(--crit)"/>`;
     });
-    const say = (s) => `${s.long}: ${num(s.m)} m in ${plural(s.n, 'roll')}, ${share(s.m, all)}% of the fabric on record`;
+    const say = (s, at) => `${s.long}: ${num(s.m)} m in ${plural(s.n, 'roll')}, ${share(s.m, all)}% of the fabric on record${at > 0 ? `. ${num(at)} m of it is lying at the dye house` : ''}`;
     return block(8, title, about, `
       <div class="pl-pipe">
-        <ol class="pl-pipe-top">${stages.map((s) => `<li tabindex="0" ${tip(say(s))}><span class="pl-pipe-name">${esc(s.name)}</span><span class="pl-pipe-m">${esc(num(s.m))}<small> m</small></span><span class="pl-pipe-n">${esc(plural(s.n, 'roll'))}</span></li>`).join('')}</ol>
+        <ol class="pl-pipe-top">${stages.map((s, i) => `<li tabindex="0" ${tip(say(s, i < 2 ? held(FABRIC[i][0]) : 0))}><span class="pl-pipe-name">${esc(s.name)}</span><span class="pl-pipe-m">${esc(num(s.m))}<small> m</small></span><span class="pl-pipe-n">${esc(plural(s.n, 'roll'))}</span></li>`).join('')}</ol>
         <div class="pl-pipe-plot">
           <svg viewBox="0 0 500 ${H}" preserveAspectRatio="none" aria-hidden="true">${svg}</svg>
           ${drops.filter((d) => d.m > 0).map((d) => `<p class="pl-pipe-off" style="left:${(d.from + 1) * 20 + 10}%" tabindex="0" ${tip(say(d))}><span class="pl-pipe-name">${esc(d.name)}</span><span class="pl-pipe-n">${esc(`${num(d.m)} m · ${plural(d.n, 'roll')}`)}</span></p>`).join('')}
         </div>
-      </div>`, lost > 0 ? `<p class="pl-lost"><span class="pl-state" data-state="crit" aria-hidden="true"></span><b>${esc(inr(lost))}</b> lost after dyeing</p>` : meta(`${num(all)} m on record`));
+      </div>${claims ? claimsHtml(claims) : ''}`, claims?.open.amt > 0 ? `<p class="pl-lost"><span class="pl-state" data-state="warn" aria-hidden="true"></span><b>${esc(inr(claims.open.amt))}</b> owed by suppliers</p>` : meta(`${num(all)} m on record`));
+  }
+
+  /** What suppliers answer for, and what nobody does. Null when claims cannot be read. */
+  function claimsModel() {
+    if (!can('claims')) return null;
+    const claims = data.all('claims');
+    const of = (...statuses) => { const mine = claims.filter((c) => statuses.includes(c.status)); return { n: mine.length, m: total(mine, (c) => c.metres), amt: total(mine, (c) => c.amount) }; };
+    // Written off: fabric that failed at dyeing with nobody to claim from, and claims that were dropped.
+    const onClaim = new Set(claims.flatMap((c) => c.rolls || []));
+    const orphans = rows('rolls').filter((r) => r.status === 'dye_reject' && !onClaim.has(r.id));
+    const cost = (r) => { const item = can('items') ? data.get('items', r.item) : null; return (Number(r.metres) || 0) * ((Number(item?.cost) || 0) + (Number(item?.dyeCost) || 0)); };
+    const dropped = of('dropped');
+    const off = { m: total(orphans, (r) => r.metres) + dropped.m, amt: can('vouchers') ? total(data.all('vouchers').filter((v) => v.dr === LOSS_LEDGER), (v) => v.amount) : total(orphans, cost) + dropped.amt };
+    return { all: of('open', 'credited', 'replaced', 'dropped'), open: of('open'), settled: of('credited', 'replaced'), dropped, off };
+  }
+
+  function claimsHtml(c) {
+    const title = 'Claims on suppliers';
+    const about = 'Fabric that fails is the supplier\'s to answer for. Claimed is every claim raised on a mill or a dye house, in metres and at the fabric cost. Still owed is what is open: no credit note and no replacement yet. Credited or replaced is settled. Written off is kept apart: fabric that failed at dyeing with nobody to claim from, and claims that were dropped, at what was posted to the fabric loss ledger.';
+    const more = canOpen('claims') ? '<button type="button" class="link pl-more" data-open="claims">Open claims</button>' : '';
+    if (!c.all.n && !(c.off.amt > 0) && !(c.off.m > 0)) return `<div class="pl-claims">${head(title, about, '', 'h4')}${quiet('Appears when a roll fails and a claim opens')}</div>`;
+    const on = (v) => `${num(v.m)} m on ${plural(v.n, 'claim')}`;
+    const fig = (label, v, note, cls = '') => `<div class="pl-claim${cls}"><p class="eyebrow">${esc(label)}</p><p class="pl-big">${esc(inr(v.amt))}</p><p class="pl-note">${esc(note)}</p></div>`;
+    const size = (v) => (c.all.amt > 0 ? v.amt : v.m);
+    const parts = [['owed', 'Still owed', c.open], ['ok', 'Credited or replaced', c.settled], ['late', 'Dropped', c.dropped]];
+    return `<div class="pl-claims">
+        ${head(title, about, more, 'h4')}
+        <div class="pl-claim-figs">
+          ${fig('Claimed', c.all, on(c.all))}
+          ${fig('Still owed', c.open, on(c.open))}
+          ${fig('Credited or replaced', c.settled, on(c.settled))}
+          ${fig('Written off', c.off, `${num(c.off.m)} m, nobody pays`, ' is-off')}
+        </div>
+        ${size(c.all) > 0 ? `<div class="pl-split" tabindex="0" role="img" aria-label="${esc(parts.map(([, name, v]) => `${name}: ${inr(v.amt)}`).join(', '))}" ${tip(parts.map(([, name, v]) => `${name}: ${inr(v.amt)}, ${num(v.m)} m`).join(' · '))}>${parts.filter(([, , v]) => size(v) > 0).map(([k, , v]) => `<i data-k="${k}" style="flex:${size(v)}"></i>`).join('')}</div>
+        <ul class="pl-legend">${parts.map(([k, name, v]) => `<li><i data-k="${k}"></i>${esc(name)} <b>${esc(plural(v.n, 'claim'))}</b></li>`).join('')}</ul>` : ''}
+      </div>`;
+  }
+
+  /** Open wholesale work by who makes it: in-house, or each production vendor. */
+  function makersHtml() {
+    if (!can('work_orders')) return '';
+    const title = 'Who makes wholesale work';
+    const about = 'Pieces on open wholesale work orders, by who makes them: in-house, or each production vendor. Under a vendor: its city, how many of those pieces are still with it, and whether any order is past its due-back date. Finished work orders are left out.';
+    const b2b = data.all('work_orders').filter((w) => w.channel === 'B2B');
+    if (!b2b.length) return block(7, title, about, quiet('Appears when wholesale work orders exist'));
+    const open = b2b.filter((w) => w.status !== 'done');
+    if (!open.length) return block(7, title, about, '<p class="pl-fine"><span class="pl-state" data-state="ok" aria-hidden="true"></span>No wholesale work open.</p>');
+    const T = iso(today()), groups = new Map();
+    for (const w of open) {
+      const key = w.madeBy === 'vendor' ? w.vendor || '?' : '', g = groups.get(key) || { key, pcs: 0, orders: 0, out: 0, late: 0 };
+      const qty = Number(w.qty) || 0;
+      g.pcs += qty; g.orders++;
+      if (w.status === 'at_vendor') { g.out += Math.max(0, qty - (Number(w.qcAt === 'vendor' ? w.pack : w.finish) || 0)); if (w.backBy && w.backBy < T) g.late++; }
+      groups.set(key, g);
+    }
+    const parts = [...groups.values()].sort((a, b) => (a.key === '' ? -1 : b.key === '' ? 1 : b.pcs - a.pcs));
+    const sum = total(parts, (p) => p.pcs), shade = (i, p) => (p.key === '' ? 0 : ((i - (parts[0].key === '' ? 1 : 0)) % 2) + 1);
+    const maker = (p) => (can('suppliers') ? data.get('suppliers', p.key) : null);
+    const name = (p) => (p.key === '' ? 'In-house' : maker(p)?.name || 'Production vendor');
+    const sub = (p) => (p.key === '' ? plural(p.orders, 'order') : [maker(p)?.city, `${num(p.out)} with them`].filter(Boolean).join(' · '));
+    const vendors = parts.filter((p) => p.key !== ''), out = total(vendors, (p) => p.pcs);
+    return block(7, title, about, `
+      <div class="pl-mix pl-makers">
+        ${sum > 0 ? `<div class="pl-mix-bar">${parts.filter((p) => p.pcs > 0).map((p) => `<i data-k="${shade(parts.indexOf(p), p)}" style="flex:${p.pcs}" tabindex="0" role="img" aria-label="${esc(`${name(p)}: ${plural(p.pcs, 'piece')}`)}" ${tip(`${name(p)}: ${plural(p.pcs, 'piece')} on ${plural(p.orders, 'order')}, ${share(p.pcs, sum)}% of open wholesale work`)}>${share(p.pcs, sum) >= 16 ? `<span>${share(p.pcs, sum)}%</span>` : ''}</i>`).join('')}</div>` : ''}
+        <ul class="pl-mk-list">${parts.map((p, i) => `<li><i data-k="m${shade(i, p)}"></i><span class="pl-mk-name">${esc(name(p))}<small>${esc(sub(p))}</small></span>${p.late ? `<span class="tag tag-crit">${esc(`${num(p.late)} late`)}</span>` : ''}<b>${esc(num(p.pcs))}</b><span class="pl-mk-p">${share(p.pcs, sum)}%</span></li>`).join('')}</ul>
+        ${canOpen('work_orders') ? '<button type="button" class="link pl-more" data-open="work_orders">Open work orders</button>' : ''}
+      </div>`, meta(`${share(out, sum)}% made by vendors`));
+  }
+
+  /** Day-plan discipline: of the lines planned on each of the last few days, how many had fabric behind them. */
+  function dayPlanHtml() {
+    if (!can('day_plans')) return '';
+    const title = 'Day plan';
+    const about = 'The last five day plans that were issued. Each bar is one day: lines that had fabric in the store and went out as bundles, against lines left out for want of fabric. The tag says whether the next working day is planned yet.';
+    const plans = data.all('day_plans');
+    const issued = plans.filter((p) => p.status === 'issued').sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 5);
+    const next = plans.filter((p) => p.date === iso(addWorkdays(today(), 1)));
+    const tag = !plans.length ? '' : next.some((p) => p.status === 'issued') ? '<span class="tag tag-ok">Next day issued</span>' : `<span class="tag tag-warn">${next.length ? 'Next day in draft' : 'Next day not planned'}</span>`;
+    const more = data.can('production', 'write') ? `<button type="button" class="link pl-more" ${go('dayplan')}>Open the day plan</button>` : canOpen('day_plans') ? '<button type="button" class="link pl-more" data-open="day_plans">Open day plans</button>' : '';
+    if (!issued.length) return block(5, title, about, `<div class="pl-dp">${quiet('Appears when a day plan is issued')}${more}</div>`, tag);
+    const ready = total(issued, (p) => p.ready), short = total(issued, (p) => p.short);
+    const line = (p) => { const r = Number(p.ready) || 0, s = Number(p.short) || 0, d = fmtDay(`${p.date}T00:00:00`); return `<li tabindex="0" ${tip(`${d}: ${plural(r, 'line')} with fabric, ${num(s)} left out`)}><span class="pl-dp-date">${esc(d)}</span><span class="pl-split" role="img" aria-label="${esc(`${num(r)} with fabric, ${num(s)} left out`)}">${r ? `<i data-k="ok" style="flex:${r}"></i>` : ''}${s ? `<i data-k="late" style="flex:${s}"></i>` : ''}</span><span class="pl-dp-n">${esc(num(r))}<small> of ${esc(num(r + s))}</small></span></li>`; };
+    return block(5, title, about, `
+      <div class="pl-dp">
+        <p class="pl-big">${esc(num(ready))}<span> of ${esc(num(ready + short))} lines had fabric</span></p>
+        <ol class="pl-dp-list">${issued.map(line).join('')}</ol>
+        <ul class="pl-legend"><li><i data-k="ok"></i>With fabric <b>${esc(num(ready))}</b></li><li><i data-k="late"></i>Left out <b>${esc(num(short))}</b></li></ul>
+        ${more}
+      </div>`, tag);
   }
 
   function productionHtml(wo) {
@@ -393,10 +485,11 @@ export function mount(el, ctx) {
   function qualityHtml() {
     if (!can('inspections')) return '';
     const title = 'Quality';
-    const about = `Fabric: rolls that passed inspection out of all rolls inspected, from the inspection records. Garments: pieces passed out of pieces checked, across all in-line and final checks. The red part of each ring is what failed.`;
+    const about = `Fabric: rolls that passed out of all rolls Deme inspected, from the inspection records. Rolls accepted on the mill's QC report are not inspected again, so they are not in the ring; the bar under it shows who passed every roll that has been passed. A roll that fails opens a claim on the supplier. Garments: pieces passed out of pieces checked, across all in-line and final checks, here and at the vendors. The red part of each ring is what failed.`;
     const insp = data.all('inspections'), checks = rows('qc_checks');
     const checked = total(checks, (c) => c.checked), passed = total(checks, (c) => c.passed);
-    if (!insp.length && !(checked > 0)) return block(4, title, about, quiet('Appears when fabric rolls are inspected'));
+    const by = CHECKED.map(([k, name]) => [k, name, rows('rolls').filter((r) => r.checkedBy === k && !['received', 'rejected', 'returned'].includes(r.status)).length]), passedBy = total(by, (b) => b[2]);
+    if (!insp.length && !(checked > 0) && !passedBy) return block(4, title, about, quiet('Appears when fabric rolls are inspected'));
     const dial = (label, good, all, unit, failWord) => {
       const p = share(good, all), bad = all - good;
       return `<div class="pl-dial">
@@ -406,6 +499,9 @@ export function mount(el, ctx) {
     };
     return block(4, title, about, `<div class="pl-dials">
       ${insp.length ? dial('Fabric inspection', insp.filter((i) => i.result === 'pass').length, insp.length, insp.length === 1 ? 'roll' : 'rolls', 'failed') : ''}
+      ${passedBy ? `<div class="pl-by"><p class="eyebrow">Who passed the rolls</p>
+        <div class="pl-split" tabindex="0" role="img" aria-label="${esc(by.map((b) => `${b[1]}: ${num(b[2])}`).join(', '))}" ${tip(by.map((b) => `${b[1]}: ${plural(b[2], 'roll')}`).join(' · '))}>${by.map((b, i) => (b[2] ? `<i data-k="m${i}" style="flex:${b[2]}"></i>` : '')).join('')}</div>
+        <ul class="pl-legend is-by">${by.map((b, i) => `<li><i data-k="m${i}"></i>${esc(b[1])} <b>${esc(num(b[2]))}</b></li>`).join('')}</ul></div>` : ''}
       ${checked > 0 ? dial('Garment checks', Math.min(passed, checked), checked, 'pieces', 'not passed') : ''}</div>`);
   }
 
@@ -460,7 +556,7 @@ export function mount(el, ctx) {
     const g = goliveModel(T), wo = ordersModel(T);
     say(T, g, wo);
     const col = (span, ...blocks) => (blocks.join('') ? `<div class="pl-col pl-c${span}">${blocks.join('')}</div>` : '');
-    const business = [fabricHtml(), qualityHtml(), col(7, productionHtml(wo), alertsHtml()), col(5, salesHtml(T), moneyHtml(T))].join('');
+    const business = [fabricHtml(), qualityHtml(), col(7, productionHtml(wo), makersHtml(), alertsHtml()), col(5, salesHtml(T), moneyHtml(T), dayPlanHtml())].join('');
     body.innerHTML = `
       ${goliveHtml(g)}
       ${business ? `<section class="pl-sec" aria-label="The business, live">${head('The business, live', 'Each picture below is drawn from the records as they stand this minute and redraws when any of them changes. A block shows only when your role can read the records behind it.', '', 'h2')}<div class="pl-grid">${business}</div></section>` : ''}

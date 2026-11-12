@@ -3,12 +3,13 @@
 // data cache, limited to what the signed-in person may read. Nothing is shown that is not recorded.
 
 import * as THREE from '../vendor/three.module.min.js';
-import { NODES, FLOWS, LAYERS, ZONES, SYSTEMS, SYSTEM_KINDS, TOURS, PARTS, nodeById } from './ontology.js';
+import { NODES as FIXED_NODES, FLOWS as FIXED_FLOWS, nodeById as fixedById, world, LAYERS, ZONES, SYSTEMS, SYSTEM_KINDS, TOURS, PARTS } from './ontology.js';
 import { buildNode, HEIGHT } from './models.js';
 import { data } from './api.js';
 import { info, esc, inr, num, fmtDate } from './ui.js';
 import { COMPANY } from '../shared/schema.js';
-import { sum, clamp, iso, DAY } from '../shared/util.js';
+import { sum, clamp, iso, DAY, today as todayDate, addWorkdays, fmtDay } from '../shared/util.js';
+import { papersMissing } from '../shared/floor.js';
 
 const PLINTH = 0.6;
 const easeOut = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
@@ -17,10 +18,19 @@ const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const day = (d) => fmtDate(`${d}T00:00:00`);
 const val = (x, fallback) => (x === undefined || x === null || x === '' || !Number.isFinite(Number(x)) ? fallback : Number(x));
 
-const ABOUT_MAP = 'Fabric comes in on the left, garments leave on the right, money and information arc overhead. Select a place, a flow line, a zone or a part inside a place to see what the records say about it. A ring marks a place where something is waiting (amber) or needs action (red).';
+const ABOUT_MAP = 'Fabric comes in on the left: ready-for-dyeing fabric goes from the mill straight to the dye house, the rest to the fabric store. Garments leave on the right. Production vendors, at the front, make most wholesale work; some of it ships from the vendor and some comes back for QC. Money and information arc overhead. Select a place, a flow line, a zone or a part inside a place to see what the records say about it. A ring marks a place where something is waiting (amber) or needs action (red).';
 const ABOUT_MOVING = 'Drag to turn. Right-drag, shift-drag or two fingers to move. Scroll or pinch to zoom.';
 
 let remembered = { layers: { material: true, goods: true, money: true, data: true } };
+
+// The places and flows on the map now: the fixed ones plus one place per production vendor on
+// record. Set each time the map is built; one map is on screen at a time.
+let NODES = FIXED_NODES, FLOWS = FIXED_FLOWS, nodeById = fixedById;
+const makersOnRecord = () => (data.canRead('suppliers') ? data.all('suppliers').filter((s) => s.kind === 'maker').map((s) => ({ id: s.id, name: s.name || 'Production vendor', city: s.city || '' })) : null);
+const makersKey = () => JSON.stringify(makersOnRecord());
+/** Is this work order made by one of the vendors a place or a flow stands for? (null stands for all of them) */
+const ofMakers = (makers, w) => w.madeBy === 'vendor' && (makers === null || makers.includes(w.vendor));
+const stillOut = (w) => Math.max(0, val(w.qty, 0) - val(w.qcAt === 'vendor' ? w.pack : w.finish, 0)); // pieces not yet back, or not yet passed there
 
 // ───────── Figures from the records ─────────
 const PREV = { cut: null, stitch: 'cut', finish: 'stitch', qc: 'finish', pack: 'qc' };
@@ -29,16 +39,17 @@ const lineOfCentre = (w) => (w.line === 'd2c' || w.line === 'sample' ? w.line : 
 
 /**
  * Read the cache into what the map shows. Returns
- *   places: { [nodeId]: { rows: [[label, value]], has, readable, health: { level, text } | null, add } }
+ *   places: { [nodeId]: { rows: [[label, value, recordType?]], has, readable, health: { level, text } | null, add } }
+ *     (a row that names a record type opens that list when its figure is selected)
  *   F: named counts the part facts reuse; F.at[nodeId] holds the per-place ones.
  * A record type the person cannot read contributes nothing.
  */
 function readRecords() {
   const R = (e) => (data.canRead(e) ? data.all(e) : null);
-  const today = iso(new Date()), old = iso(Date.now() - 14 * DAY);
+  const today = iso(new Date()), old = iso(Date.now() - 14 * DAY), nextDay = iso(addWorkdays(todayDate(), 1));
   const places = Object.fromEntries(NODES.map((n) => [n.id, { rows: [], has: false, readable: false, health: null, add: n.add || n.rec }]));
   const F = { at: Object.fromEntries(NODES.map((n) => [n.id, {}])) };
-  const row = (id, label, value) => { places[id].rows.push([label, String(value)]); places[id].readable = true; };
+  const row = (id, label, value, entity) => { places[id].rows.push([label, String(value), entity]); places[id].readable = true; };
   const has = (id, x) => { if (x) places[id].has = true; };
   const flag = (id, level, text) => { const h = places[id].health; if (!h || (level === 'crit' && h.level !== 'crit')) places[id].health = { level, text }; };
   const count = (list, f) => list.filter(f).length;
@@ -47,7 +58,9 @@ function readRecords() {
   const rolls = R('rolls'), items = R('items'), suppliers = R('suppliers'), lots = R('dye_lots'), pos = R('purchase_orders'), grns = R('goods_receipts'),
     centres = R('workstations'), wos = R('work_orders'), machines = R('machines'), parcels = R('parcels'), shop = R('shop_orders'), store = R('store_orders'), fits = R('fit_visits'),
     sos = R('sales_orders'), customers = R('customers'), invoices = R('invoices'), vouchers = R('vouchers'), bills = R('bills'), samples = R('sample_requests'), collections = R('collections'),
-    bundles = R('bundles'), checks = R('qc_checks'), inspections = R('inspections'), moves = R('stock_moves');
+    bundles = R('bundles'), checks = R('qc_checks'), inspections = R('inspections'), moves = R('stock_moves'),
+    claims = R('claims'), reports = R('fabric_reports'), returns = R('returns'), plans = R('day_plans');
+  const leftOn = (r) => val(r.left, val(r.metres, 0));
 
   const withStatus = (s) => rolls.filter((r) => r.status === s);
   const low = (kinds) => items.filter((i) => kinds.includes(i.kind) && val(i.minLevel, 0) > 0 && val(i.onHand, 0) < val(i.minLevel, 0));
@@ -57,6 +70,16 @@ function readRecords() {
   if (suppliers) {
     F.mills = count(suppliers, (s) => s.kind === 'mill'); row('mills', 'Fabric mills', F.mills); has('mills', F.mills);
     F.trimVendors = count(suppliers, (s) => s.kind === 'trims'); row('trims', 'Thread and trim vendors', F.trimVendors); has('trims', F.trimVendors);
+  }
+  // Fabric that failed is the supplier's to answer for: what is claimed and not yet settled.
+  if (claims) {
+    for (const [who, id, label] of [['mill', 'mills', 'Open claims on mills'], ['dyer', 'dyer', 'Open claims on the dye house']]) {
+      const open = claims.filter((c) => c.against === who && c.status === 'open'), owed = sum(open, (c) => val(c.amount, 0));
+      F[`${who}Claims`] = open.length; F[`${who}Owed`] = owed;
+      row(id, label, open.length ? `${open.length} · ${inr(owed)}` : 0, 'claims'); has(id, count(claims, (c) => c.against === who));
+      if (open.length) flag(id, 'warn', `${plural(open.length, 'claim')} open, ${inr(owed)} owed`);
+    }
+    row('mills', 'Claims credited or replaced', count(claims, (c) => c.against === 'mill' && (c.status === 'credited' || c.status === 'replaced')), 'claims');
   }
   if (rolls) {
     const c = withStatus('rejected').length;
@@ -74,6 +97,7 @@ function readRecords() {
     const late = out.filter((l) => l.dueBack && l.dueBack < today);
     F.lotsOut = out.length; F.lotsChecked = count(lots, (l) => l.status === 'received');
     row('dyer', 'Lots at the dyer', out.length); has('dyer', lots.length);
+    if (late.length) flag('dyer', 'warn', `${plural(late.length, 'lot')} overdue`);
     row('dyecheck', 'Lots due back', out.length);
     if (out[0]?.dueBack) row('dyecheck', 'Next due', `${out[0].no || ''} ${out[0].shade || ''}, ${day(out[0].dueBack)}`.trim());
     has('dyecheck', out.length || F.lotsChecked);
@@ -82,26 +106,37 @@ function readRecords() {
 
   // Fabric, roll by roll
   if (rolls) {
-    const waiting = withStatus('received'), passed = withStatus('passed'), rejected = withStatus('rejected'), out = withStatus('at_dyer'), dyed = withStatus('dyed'), lost = withStatus('dye_reject');
+    // Rolls the mill delivered to a dye house lie there; the rest are at Deme.
+    const lying = rolls.filter((r) => r.heldAt && (r.status === 'received' || r.status === 'passed')), unchecked = lying.filter((r) => r.status === 'received');
+    const waiting = withStatus('received').filter((r) => !r.heldAt), passed = withStatus('passed'), rejected = withStatus('rejected'), out = withStatus('at_dyer'), dyed = withStatus('dyed');
     const when = (r) => r.receivedOn || String(r.createdAt || '').slice(0, 10) || today;
     const fresh = waiting.filter((r) => when(r) >= old), stale = waiting.filter((r) => when(r) < old);
-    Object.assign(F, { awaiting: waiting.length, stale: stale.length, dyed: dyed.length, metresOut: metres(out) });
+    Object.assign(F, { awaiting: waiting.length, stale: stale.length, dyed: dyed.length, metresOut: metres(out), lying: metres(lying), lyingRolls: lying.length });
 
-    row('dyer', 'Metres out', num(F.metresOut)); row('dyer', 'Rolls failed after dyeing', lost.length); has('dyer', out.length || lost.length);
-    if (lost.length) flag('dyer', 'crit', `${plural(lost.length, 'roll')} failed after dyeing`);
+    row('dyer', 'Metres lying there, waiting', num(F.lying), 'rolls'); row('dyer', 'Of those, rolls not checked yet', unchecked.length, 'rolls');
+    row('dyer', 'Metres at the dyer on lots', num(F.metresOut), 'dye_lots'); has('dyer', out.length || lying.length);
+    if (unchecked.length) flag('dyer', 'warn', `${plural(unchecked.length, 'roll')} lying there, not checked`);
 
     row('dock', 'Awaiting inspection, last 14 days', fresh.length); has('dock', fresh.length);
 
-    row('fabricqc', 'Awaiting inspection', waiting.length); row('fabricqc', 'Passed', passed.length); row('fabricqc', 'Rejected', rejected.length);
+    row('fabricqc', 'Awaiting inspection at the store', waiting.length); row('fabricqc', 'Checked by Deme, store or dye house', count(rolls, (r) => r.checkedBy === 'store' || r.checkedBy === 'dyehouse'));
+    row('fabricqc', 'Accepted on the mill\'s report', count(rolls, (r) => r.checkedBy === 'mill')); row('fabricqc', 'Passed, waiting for dyeing', passed.length); row('fabricqc', 'Rejected', rejected.length);
     has('fabricqc', waiting.length || passed.length || rejected.length);
     if (waiting.length) flag('fabricqc', 'warn', `${plural(waiting.length, 'roll')} awaiting inspection`);
 
     row('darkroom', 'Rolls waiting over 14 days', stale.length); row('darkroom', 'Metres', num(metres(stale))); has('darkroom', stale.length);
     if (stale.length) flag('darkroom', 'warn', `${plural(stale.length, 'roll')} not inspected in over 14 days`);
 
+    const left = (list) => Math.round(sum(list, leftOn));
     row('fabricstore', 'Dyed rolls', dyed.length);
-    row('fabricstore', 'Metres reserved', num(metres(dyed.filter((r) => r.reservedFor)))); row('fabricstore', 'Metres free', num(metres(dyed.filter((r) => !r.reservedFor))));
+    row('fabricstore', 'Metres left, reserved', num(left(dyed.filter((r) => r.reservedFor)))); row('fabricstore', 'Metres left, free', num(left(dyed.filter((r) => !r.reservedFor))));
     has('fabricstore', dyed.length);
+  }
+  if (reports) {
+    const fresh = count(reports, (r) => r.status === 'new');
+    F.reportsOpen = count(reports, (r) => r.status !== 'closed');
+    row('dyer', 'Open problem reports', F.reportsOpen, 'fabric_reports'); has('dyer', reports.length);
+    if (fresh) flag('dyer', 'warn', `${plural(fresh, 'new problem report')}`);
   }
   if (inspections) { F.inspected = inspections.length; has('fabricqc', F.inspected); }
 
@@ -141,8 +176,14 @@ function readRecords() {
     const sent = parcels.filter((p) => p.kind !== 'store');
     F.packed = count(parcels, (p) => p.status === 'packed'); F.atFactory = count(parcels, (p) => p.status === 'at_factory');
     F.transit = count(sent, (p) => p.status === 'in_transit'); F.b2bParcels = count(parcels, (p) => p.kind === 'b2b');
-    row('dispatch', 'Packed, not scanned', F.packed); row('dispatch', 'Store pieces at the factory', F.atFactory); has('dispatch', parcels.length);
-    if (F.packed) flag('dispatch', 'warn', `${plural(F.packed, 'parcel')} packed, not scanned`);
+    // The office adds the paperwork; until then a packed parcel cannot leave.
+    const outward = parcels.filter((p) => p.kind !== 'store');
+    F.needPapers = count(parcels, (p) => p.status === 'packed' && papersMissing(p));
+    row('dispatch', 'Packed, not scanned', F.packed); row('dispatch', 'Of those, waiting for paperwork', F.needPapers, 'parcels'); row('dispatch', 'Store pieces at the factory', F.atFactory); has('dispatch', parcels.length);
+    if (F.packed) flag('dispatch', 'warn', F.needPapers ? `${plural(F.needPapers, 'parcel')} stopped for paperwork` : `${plural(F.packed, 'parcel')} packed, not scanned`);
+    row('papers', 'Parcels waiting for paperwork', F.needPapers, 'parcels'); row('papers', 'Paperwork in, not scanned out', count(outward, (p) => p.status === 'packed' && !papersMissing(p)), 'parcels');
+    row('papers', 'Shipping from a vendor or the office', count(outward, (p) => p.shipFrom === 'vendor' || p.shipFrom === 'office'), 'parcels'); has('papers', outward.length);
+    if (F.needPapers) flag('papers', 'warn', `${plural(F.needPapers, 'parcel')} packed, waiting for paperwork`);
     row('dhl', 'In transit', F.transit); row('dhl', 'Delivered', count(sent, (p) => p.status === 'delivered')); row('dhl', 'Coming back', count(sent, (p) => p.status === 'returning'));
     has('dhl', count(sent, (p) => p.status !== 'packed'));
   }
@@ -175,7 +216,44 @@ function readRecords() {
     F.finalChecks = final.length; F.rework = sum(final, (c) => val(c.rework, 0));
     row('finalqc', 'Pieces sent for rework', num(F.rework)); has('finalqc', final.length);
   }
+  // Production vendors: what is out with each, what is due back and what Deme's QC passed there.
+  for (const n of NODES.filter((x) => x.zone === 'makers')) {
+    const A = F.at[n.id];
+    if (suppliers) {
+      places[n.id].readable = true;
+      if (n.makers?.length > 1) row(n.id, 'Vendors', n.makers.length, 'suppliers'); else if (n.makers?.length) row(n.id, 'City', n.city || 'Not set');
+      has(n.id, n.makers?.length);
+    }
+    if (wos) {
+      const mine = wos.filter((w) => ofMakers(n.makers, w)), out = mine.filter((w) => w.status === 'at_vendor');
+      const back = out.filter((w) => w.qcAt !== 'vendor'), late = out.filter((w) => w.backBy && w.backBy < today);
+      const next = out.filter((w) => w.backBy).sort((a, b) => a.backBy.localeCompare(b.backBy))[0];
+      A.out = sum(out, stillOut); A.dueBack = sum(back, stillOut); A.passed = sum(mine.filter((w) => w.qcAt === 'vendor'), (w) => val(w.pack, 0));
+      row(n.id, 'Pieces with the vendor', `${num(A.out)} on ${plural(out.length, 'order')}`, 'work_orders'); row(n.id, 'Due back for QC here', num(A.dueBack), 'work_orders');
+      if (next) row(n.id, 'Next due', `${next.no || ''}, ${day(next.backBy)}`.trim());
+      row(n.id, 'Pieces passed there', num(A.passed), 'qc_checks'); has(n.id, mine.length);
+      if (late.length) flag(n.id, 'crit', `${plural(late.length, 'work order')} past the due-back date`);
+    }
+  }
+  if (wos) {
+    const sent = wos.filter((w) => w.madeBy === 'vendor' && w.status === 'at_vendor');
+    F.vendorBack = sum(sent.filter((w) => w.qcAt !== 'vendor'), stillOut);
+    row('finalqc', 'Due back from vendors', num(F.vendorBack), 'work_orders');
+  }
+  // The day plan: is the next working day issued, and how the last one went.
+  if (plans) {
+    const next = plans.filter((p) => p.date === nextDay), issued = plans.filter((p) => p.status === 'issued').sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const state = next.some((p) => p.status === 'issued') ? 'Issued' : next.length ? 'Draft' : 'Not planned';
+    F.planNext = state; F.plansIssued = issued.length;
+    row('cutting', `Day plan for ${fmtDay(`${nextDay}T00:00:00`)}`, state, 'day_plans');
+    if (issued[0]) row('cutting', 'Last plan issued', `${val(issued[0].ready, 0)} with fabric, ${val(issued[0].short, 0)} left out`, 'day_plans');
+    has('cutting', plans.length);
+    const toCut = wos ? wos.some((w) => w.madeBy !== 'vendor' && !['done', 'hold', 'at_vendor'].includes(w.status) && val(w.cut, 0) < val(w.qty, 0)) : plans.length > 0;
+    if (state !== 'Issued' && toCut) flag('cutting', 'warn', `No day plan issued for ${fmtDay(`${nextDay}T00:00:00`)}`);
+  }
   if (bundles) {
+    F.bundlesWaiting = count(bundles, (b) => b.status === 'cut');
+    row('cutting', 'Bundles cut, waiting', F.bundlesWaiting, 'bundles');
     const now = bundles.filter((b) => b.status === 'stitching');
     F.stitching = now.length;
     if (wos) { const lineOf = new Map(wos.map((w) => [w.id, LINE_OF[w.channel]])); for (const n of NODES.filter((x) => x.wc?.line)) F.at[n.id].stitching = count(now, (b) => lineOf.get(b.workOrder) === n.wc.line); }
@@ -206,6 +284,16 @@ function readRecords() {
   for (const id of ['revolve', 'ukbuyers', 'global']) {
     if (accounts) { row(id, 'B2B accounts', accounts.size); has(id, accounts.size); }
     if (b2b) { row(id, 'B2B sales orders, open', b2bOpen.length); if (nextShip) row(id, 'Next to ship', `${nextShip.no || ''}, ${day(nextShip.shipBy)}`); has(id, b2b.length); }
+  }
+
+  // Pieces that came back
+  if (returns) {
+    const c = (st) => count(returns, (r) => r.status === st);
+    F.toCheck = c('received'); F.fitToSell = c('restocked'); F.soldOn = c('sold');
+    row('resale', 'Received, to be checked', F.toCheck, 'returns'); row('resale', 'Fit to sell, waiting', F.fitToSell, 'returns'); row('resale', 'Sold on', F.soldOn, 'returns'); row('resale', 'Written off', c('written_off'), 'returns');
+    has('resale', returns.length);
+    if (F.toCheck) flag('resale', 'warn', `${plural(F.toCheck, 'return')} to be checked`);
+    else if (F.fitToSell) flag('resale', 'warn', `${plural(F.fitToSell, 'piece')} fit to sell, not sold yet`);
   }
 
   // Office
@@ -243,10 +331,17 @@ function partFact(F, id, part) {
   const f = (label, v) => (v === undefined ? null : [label, String(v)]);
   switch (part) {
     case 'shed': return f('Fabric mills', F.mills);
+    case 'chimney': return id === 'mills' ? f('Open claims on mills', F.millClaims) : null;
     case 'greige': return id === 'darkroom' ? f('Rolls waiting over 14 days', F.stale) : f('Rolls awaiting inspection', F.awaiting);
     case 'vendor': return f('Thread and trim vendors', F.trimVendors);
     case 'cone': case 'conewall': return F.threads === undefined ? null : f('Thread below minimum', `${F.lowThread} of ${F.threads}`);
     case 'dyeworks': case 'vat': return f('Lots at the dyer', F.lotsOut);
+    case 'held': return F.lying === undefined ? null : f('Metres lying there, waiting', num(F.lying));
+    case 'workshop': case 'vendorline': return A.out === undefined ? null : f('Pieces with the vendor', num(A.out));
+    case 'qcdesk': return A.passed === undefined ? null : f('Pieces passed there', num(A.passed));
+    case 'deskoffice': case 'papers': case 'printer': return f('Parcels waiting for paperwork', F.needPapers);
+    case 'returnrail': return f('Fit to sell, waiting', F.fitToSell);
+    case 'checktable': return f('Returns to be checked', F.toCheck);
     case 'dryline': return F.metresOut === undefined ? null : f('Metres at the dyer', num(F.metresOut));
     case 'bench': return f('Receipts not posted', F.draftGrns);
     case 'truck': return f('Open purchase orders', F.openPos);
@@ -256,7 +351,7 @@ function partFact(F, id, part) {
     case 'rack': case 'dyedroll': return f('Dyed rolls', F.dyed);
     case 'lightbox': return f('Lots due back', F.lotsOut);
     case 'counter': return f('Issues to the floor', F.issues);
-    case 'cuttable': return A.pieces === undefined ? null : f('Pieces to cut', num(A.pieces));
+    case 'cuttable': return A.pieces !== undefined ? f('Pieces to cut', num(A.pieces)) : f('Bundles cut, waiting', F.bundlesWaiting);
     case 'toolwall': return f('Tools and consumables below minimum', F.lowTools);
     case 'repair': return f('Machines down', F.machinesDown);
     case 'station': return f('Bundles being stitched', A.stitching ?? F.stitching);
@@ -266,7 +361,7 @@ function partFact(F, id, part) {
     case 'qctable': return f('Final checks recorded', F.finalChecks);
     case 'rework': return F.rework === undefined ? null : f('Pieces sent for rework', num(F.rework));
     case 'conveyor': case 'scangate': return f('Parcels packed, not scanned', F.packed);
-    case 'parcel': return id === 'dispatch' ? f('Parcels packed, not scanned', F.packed) : id === 'dhl' ? f('Parcels in transit', F.transit) : id === 'shopify' ? f('Orders packed', F.shopPacked) : f('B2B cartons recorded', F.b2bParcels);
+    case 'parcel': return nodeById[id]?.zone === 'makers' ? (A.passed === undefined ? null : f('Pieces passed there', num(A.passed))) : id === 'resale' ? f('Returns to be checked', F.toCheck) : id === 'dispatch' ? f('Parcels packed, not scanned', F.packed) : id === 'dhl' ? f('Parcels in transit', F.transit) : id === 'shopify' ? f('Orders packed', F.shopPacked) : f('B2B cartons recorded', F.b2bParcels);
     case 'depot': case 'van': return f('Parcels in transit', F.transit);
     case 'screen': return f('New Shopify orders', F.shopNew);
     case 'shopfront': return f('Open store orders', F.storeOpen);
@@ -277,22 +372,44 @@ function partFact(F, id, part) {
     case 'beacon': return f('Overdue work orders', F.lateWos);
     case 'ledgerhall': return f('Vouchers not in Tally', F.vouchersOpen);
     case 'coins': return f('Unpaid bills', F.unpaid);
-    case 'person': return A.people === undefined ? null : f('People here', num(A.people));
+    case 'person': return id === 'papers' ? f('Parcels waiting for paperwork', F.needPapers) : A.people === undefined ? null : f('People here', num(A.people));
     default: return null;
   }
 }
 
-/** The records behind a flow: { entity, label, count }, or null when the person cannot read them. */
+// Tests a flow names in `where`, for what a list of field values cannot say.
+const WHERE = {
+  toDyer: (g) => g.deliveredTo === 'dyer',
+  toStore: (g) => g.deliveredTo !== 'dyer',
+  storeWaiting: (r) => r.status === 'received' && !r.heldAt,
+  fromPlan: (b) => !!b.plan,
+  needsPapers: (p) => p.status === 'packed' && !!papersMissing(p),
+  sentOut: (w, f) => ofMakers(f.makers, w) && w.status === 'at_vendor',
+  backForQc: (w, f) => ofMakers(f.makers, w) && w.qcAt !== 'vendor',
+  shippedThere: (w, f) => ofMakers(f.makers, w) && w.qcAt === 'vendor',
+};
+
+/** The records behind a flow: { entity, label, count, total in the list }, or null when the person cannot read them. */
 function flowRecords(f) {
   const e = data.entity(f.rec);
   if (!e || !data.canRead(f.rec)) return null;
   let docs = data.all(f.rec), label = e.name;
+  const total = docs.length;
   if (f.only) { docs = docs.filter((d) => Object.entries(f.only).every(([k, allowed]) => allowed.includes(d[k]))); label = f.label || label; }
+  if (f.where) { docs = docs.filter((d) => WHERE[f.where](d, f)); label = f.label || label; }
   if (f.via && data.canRead(f.via[1])) { const [field, ref, key, allowed] = f.via; docs = docs.filter((d) => allowed.includes(data.get(ref, d[field])?.[key])); label = f.label || label; }
-  return { entity: f.rec, label, count: docs.length };
+  return { entity: f.rec, label, count: docs.length, total };
 }
 
+/** The map is built for the production vendors on record, and built again when that list changes. */
 export function mount(el, ctx) {
+  let key = makersKey(), stop = build(el, ctx);
+  const off = data.on(() => { const now = makersKey(); if (now === key) return; key = now; stop(); stop = build(el, ctx); });
+  return () => { off(); stop(); };
+}
+
+function build(el, ctx) {
+  ({ NODES, FLOWS, nodeById } = world(makersOnRecord()));
   el.innerHTML = `
     <div class="map">
       <canvas class="map-canvas" aria-label="3D map of the business. Drag to turn, scroll to zoom, select a place, a flow, a zone or a part for detail."></canvas>
@@ -743,15 +860,19 @@ export function mount(el, ctx) {
       const id = selPart.userData.part, part = PARTS[id], fact = partFact(state.F, selected, id);
       if (part) partHtml = `<div class="insp-part"><p class="eyebrow">Part</p><div class="insp-title"><strong>${esc(part.name)}</strong>${info(part.what, part.name)}</div>${fact ? `<dl class="metrics"><div><dt>${esc(fact[0])}</dt><dd class="num">${esc(fact[1])}</dd></div></dl>` : ''}</div>`;
     }
+    // Where the work of this place is done, when it has a screen of its own.
+    const screen = selected === 'dyer' && data.can('quality', 'scan') ? ['dye', 'Open the dye house'] : selected === 'cutting' && data.can('production', 'write') ? ['dayplan', 'Open the day plan'] : null;
+    const vendor = n.makers?.length === 1 && data.canRead('suppliers') ? `<button class="btn btn-sm" type="button" data-open="suppliers" data-id="${esc(n.makers[0])}">Open vendor</button>` : '';
     const actions = p.has
-      ? `${data.canRead(n.rec) ? `<button class="btn btn-sm btn-primary" type="button" data-open="${n.rec}">Open records</button>` : ''}${n.plan && canPlan() ? '<button class="btn btn-sm" type="button" data-room>Test a change here</button>' : ''}`
+      ? `${data.canRead(n.rec) ? `<button class="btn btn-sm btn-primary" type="button" data-open="${n.rec}">Open records</button>` : ''}${vendor}${screen ? `<button class="btn btn-sm" type="button" data-screen="${screen[0]}">${screen[1]}</button>` : ''}${n.plan && canPlan() ? '<button class="btn btn-sm" type="button" data-room>Test a change here</button>' : ''}`
       : p.readable ? addButton(p.add, true) : '';
+    const figure = ([k, v, entity]) => `<div><dt>${esc(k)}</dt><dd class="num">${entity && data.canRead(entity) ? `<button type="button" class="link" data-open="${entity}" aria-label="${esc(`${k}: ${v}. Open records`)}">${esc(v)}</button>` : esc(v)}</dd></div>`;
     return `
       <div class="insp-top"><button class="eyebrow insp-zone" type="button" data-zone="${zone.id}">${esc(zone.name)}</button>${back}</div>
       ${partHtml}
       <div class="insp-title"><h2>${esc(n.name)}</h2>${info(about, n.name)}</div>
       <div class="insp-status">${statusOf(p)}</div>
-      ${p.has && p.rows.length ? `<dl class="metrics">${p.rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd class="num">${esc(v)}</dd></div>`).join('')}</dl>` : ''}
+      ${p.has && p.rows.length ? `<dl class="metrics">${p.rows.map(figure).join('')}</dl>` : ''}
       <div class="insp-actions">${actions}</div>
       <section><h3>Systems</h3>
         <ul class="sys-list">${n.systems.map((id) => { const s = SYSTEMS[id], k = SYSTEM_KINDS[s.kind]; return `<li><span class="tag ${k.tag}">${esc(s.name)}</span>${info(s.does, `${k.name}: ${s.name}`)}</li>`; }).join('')}</ul>
@@ -771,7 +892,7 @@ export function mount(el, ctx) {
       <div class="flow-ends">${end(f.from)}<span aria-hidden="true">→</span><span class="sr">to</span>${end(f.to)}</div>
       <div class="insp-status">${layerTag(f.layer)}${info(LAYERS[f.layer].what, LAYERS[f.layer].name)}</div>
       ${rec ? `<dl class="metrics"><div><dt>${esc(rec.label)}</dt><dd class="num">${rec.count}</dd></div></dl>
-      <div class="insp-actions">${rec.count ? `<button class="btn btn-sm btn-primary" type="button" data-open="${rec.entity}">Open records</button>` : addButton(rec.entity, true)}</div>`
+      <div class="insp-actions">${rec.count ? `<button class="btn btn-sm btn-primary" type="button" data-open="${rec.entity}">Open records</button>` : rec.total ? `<button class="btn btn-sm btn-outline" type="button" data-open="${rec.entity}">Open ${esc(data.entity(rec.entity).name.toLowerCase())}</button>` : addButton(rec.entity, true)}</div>`
     : '<p class="faint">No access to these records</p>'}`;
   }
 
@@ -798,8 +919,9 @@ export function mount(el, ctx) {
     else if (fl) { selectFlow(Number(fl.dataset.flow)); focusFlow(Number(fl.dataset.flow)); }
     else if (zn) { selectZone(zn.dataset.zone); focusZone(zn.dataset.zone); }
     else if (t) startTour(t.dataset.tour);
-    else if (open) ctx.openEntity(open.dataset.open);
+    else if (open) ctx.openEntity(open.dataset.open, open.dataset.id ? { id: open.dataset.id } : undefined);
     else if (add) ctx.openEntity(add.dataset.add, { add: true });
+    else if (hit('[data-screen]')) ctx.go(hit('[data-screen]').dataset.screen);
     else if (hit('[data-room]')) ctx.go('room');
   });
 
@@ -809,7 +931,7 @@ export function mount(el, ctx) {
     if (tour) endTour(false);
     tour = { def, i: 0, saved: { ...layers } };
     layers = { material: false, goods: false, money: false, data: false, [def.layer]: true };
-    if (def.id === 'order' || def.id === 'samples') layers.data = layers.goods = true;
+    if (def.id === 'order' || def.id === 'samples' || def.id === 'wholesale') layers.data = layers.goods = true;
     showStep();
   }
   function showStep() {

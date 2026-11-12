@@ -3,12 +3,14 @@
 
 import { data } from './api.js';
 import { info, esc, inr, num, $ } from './ui.js';
-import { iso, today, fmtDate, fmtDay } from '../shared/util.js';
+import { iso, today, fmtDate, fmtDay, addWorkdays, DAY } from '../shared/util.js';
+import { papersMissing } from '../shared/floor.js';
 
 const ARROW = '<svg class="wk-arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h9.5M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const TICK = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const SEV = { crit: 0, warn: 1, info: 2 };
 const DAYS = 14;
+const CLAIM_DAYS = 14;   // an open claim older than this is chased
 
 const plural = (n, one, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 const day = (isoDate) => fmtDate(`${isoDate}T00:00:00`);
@@ -54,6 +56,15 @@ export function mount(el, ctx) {
   }
 
   // ───────── Needs attention ─────────
+  /** Tomorrow's cutting is planned the evening before: say so while the next working day has no issued plan. */
+  function dayPlan(rows) {
+    if (!data.can('production', 'write') || !data.canRead('day_plans')) return;
+    const next = iso(addWorkdays(today(), 1)), plans = data.all('day_plans').filter((p) => p.date === next);
+    if (plans.some((p) => p.status === 'issued')) return;
+    // Nothing to plan when no in-house work is waiting to be cut.
+    if (data.canRead('work_orders') && !data.all('work_orders').some((w) => w.madeBy !== 'vendor' && !['done', 'hold', 'at_vendor'].includes(w.status) && (w.cut || 0) < (w.qty || 0))) return;
+    rows.push({ sev: 'warn', n: 1, title: `Day plan to issue for ${fmtDay(`${next}T00:00:00`)}`, tag: 'Plan', sub: plans.length ? 'Draft, not issued yet' : 'Not started', go: () => ctx.go('dayplan') });
+  }
   function attention(T) {
     const rows = [];
     const add = (sev, entity, match, one, many, tag, o = {}) => {
@@ -68,13 +79,21 @@ export function mount(el, ctx) {
     add('crit', 'work_orders', (w) => w.status !== 'done' && w.due && w.due < T, 'Work order overdue', 'Work orders overdue', 'Overdue');
     add('crit', 'bills', (b) => b.status !== 'paid' && b.due && b.due < T, 'Supplier bill past due', 'Supplier bills past due', 'Pay');
     add('crit', 'dye_lots', (l) => l.status === 'at_dyer' && l.dueBack && l.dueBack < T, 'Dye lot late from the dyer', 'Dye lots late from the dyer', 'Late');
+    add('crit', 'work_orders', (w) => w.status === 'at_vendor' && w.backBy && w.backBy < T, 'Vendor work past its due-back date', 'Vendor work past its due-back date', 'Late', { name: (w) => [w.no, data.canRead('suppliers') ? data.title('suppliers', w.vendor) : ''].filter(Boolean).join(' ') });
     add('crit', 'courier_invoices', (c) => c.status === 'disputed', 'Courier invoice with mismatches', 'Courier invoices with mismatches', 'Mismatch');
     add('warn', 'items', (i) => i.minLevel > 0 && (i.onHand || 0) < i.minLevel, 'Material below its minimum', 'Materials below their minimum', 'Low');
     add('warn', 'rolls', (r) => r.status === 'received', 'Roll awaiting inspection', 'Rolls awaiting inspection', 'Inspect');
+    const dyeScreen = data.can('quality', 'scan') ? () => ctx.go('dye') : undefined;
+    add('warn', 'fabric_reports', (r) => r.status === 'new', 'New problem report on fabric', 'New problem reports on fabric', 'Look', { go: dyeScreen });
+    const stale = iso(Date.now() - CLAIM_DAYS * DAY);
+    add('warn', 'claims', (c) => c.status === 'open' && (c.date || String(c.createdAt || '').slice(0, 10) || T) < stale, `Claim open over ${CLAIM_DAYS} days`, `Claims open over ${CLAIM_DAYS} days`, 'Chase', { name: (c) => [c.no, data.canRead('suppliers') ? data.title('suppliers', c.supplier) : ''].filter(Boolean).join(' ') });
+    dayPlan(rows);
     add('warn', 'purchase_orders', (p) => p.status === 'draft', 'Purchase order waiting for approval', 'Purchase orders waiting for approval', 'Approve');
     add('warn', 'sample_requests', (s) => s.status === 'requested', 'Sample request waiting', 'Sample requests waiting', 'Decide');
     add('warn', 'shop_orders', (o) => o.status === 'new' || o.status === 'in_production', 'Shopify order not yet packed', 'Shopify orders not yet packed', 'Pack');
-    add('warn', 'parcels', (p) => p.status === 'packed', 'Parcel packed, not scanned out', 'Parcels packed, not scanned out', 'Scan', { name: (p) => p.barcode, go: canGate() ? () => ctx.go('gate') : canOpen('parcels') ? () => ctx.openEntity('parcels') : null });
+    // A packed parcel waits for the office first, then for the gate.
+    add('warn', 'parcels', (p) => p.status === 'packed' && papersMissing(p), 'Parcel waiting for paperwork', 'Parcels waiting for paperwork', 'Paperwork', { name: (p) => p.barcode });
+    add('warn', 'parcels', (p) => p.status === 'packed' && !papersMissing(p), 'Parcel packed, not scanned out', 'Parcels packed, not scanned out', 'Scan', { name: (p) => p.barcode, go: canGate() ? () => ctx.go('gate') : canOpen('parcels') ? () => ctx.openEntity('parcels') : null });
     add('warn', 'leaves', (l) => l.status === 'applied', 'Leave request waiting', 'Leave requests waiting', 'Approve', { name: (l) => data.title('employees', l.employee) });
     if (data.canRead('store_orders')) add('info', 'store_orders', (s) => s.status === 'at_factory', 'Store piece at the factory', 'Store pieces at the factory', 'At factory');
     else add('info', 'parcels', (p) => p.kind === 'store' && p.status === 'at_factory', 'Store piece at the factory', 'Store pieces at the factory', 'At factory', { name: (p) => p.barcode, go: canGate() ? () => ctx.go('gate') : canOpen('parcels') ? () => ctx.openEntity('parcels') : null });

@@ -22,6 +22,7 @@ const unitPrism = shared((() => { // triangular roof: 1 wide (x), 1 high, 1 deep
 export const HEIGHT = { // rough height of each kind, for labels and where arcs leave the roof
   mill: 8, vendor: 5.5, dye: 6, dock: 3.6, rig: 5, dark: 5.4, racks: 4.4, check: 3.4, thread: 4.2, cutting: 2.8, tools: 3.8,
   line: 2.8, sample: 3.6, finish: 3, qc: 3.6, gate: 5, hub: 5.4, shop: 7, store: 6, tower: 14, buyers: 6.6, studio: 5.4, control: 16, ledger: 7.6,
+  maker: 5.2, plot: 1.6, desk: 4.6, resale: 3.4,
 };
 
 // Cloth and thread colours for the garments, cones and rolls drawn in the models. Decoration only.
@@ -121,6 +122,10 @@ export function buildNode(node, M) {
       k.part('dryline');
       k.box(3.4, 0.14, 0.2, M.ink, -w * 0.2, 1.9, hd - 1.2);
       ['SEAGREEN', 'INDIGO', 'CORAL'].forEach((s, i) => k.box(0.95, 1.5, 0.08, cloth(s), -w * 0.2 - 1.1 + i * 1.1, 0.45, hd - 1.2));
+      // Ready-for-dyeing rolls the mill delivered straight here, waiting to be passed and dyed.
+      k.part('held');
+      for (let i = 0; i < 2; i++) k.roll(0.5, 2.6, M.raw, hw - 2.9, 0, hd - 1.8 + i * 1.05, 'x');
+      k.roll(0.5, 2.6, M.raw, hw - 2.9, 0.9, hd - 1.28, 'x');
       break;
     }
     case 'dock': {
@@ -358,6 +363,56 @@ export function buildNode(node, M) {
       for (let i = 0; i < 5; i++) k.cyl(0.36, 3.6, M.block, -w * 0.3 + i * (w * 0.15), 0.7, d * 0.24);
       k.part('coins');
       for (let i = 0; i < 3; i++) k.cyl(0.7, 0.24, M.money, hw - 1.1, i * 0.26, hd - 0.9);
+      break;
+    }
+    case 'maker': { // a production vendor: a workshop, its line, and the desk where Deme's QC checks bulk work
+      k.part('workshop');
+      k.box(w * 0.56, 3.0, d * 0.5, M.block, -w * 0.16, 0, -d * 0.2);
+      for (let i = 0; i < 3; i++) k.roof(w * 0.56 / 3, 1.3, d * 0.5, M.goods, -w * 0.16 - w * 0.28 + (i + 0.5) * (w * 0.56 / 3), 3.0, -d * 0.2);
+      k.box(1.3, 1.9, 0.1, M.ink, -w * 0.16, 0, d * 0.05 + 0.04);
+      for (let i = 0; i < 4; i++) {
+        const x = -hw + 1.3 + i * 1.55;
+        k.part('vendorline');
+        k.box(1.05, 0.7, 0.7, M.block, x, 0, hd - 1.5); k.box(0.5, 0.42, 0.3, M.ink, x + 0.15, 0.7, hd - 1.5); k.box(0.5, 0.05, 0.4, cloth(SH[i + 2]), x - 0.25, 0.7, hd - 1.5);
+        k.cyl(0.21, 0.9, M.staff, x - 0.1, 0, hd - 0.88); k.ball(0.2, M.staff, x - 0.1, 0.9, hd - 0.88);
+      }
+      k.part('qcdesk');
+      k.box(2.2, 0.9, 1.2, M.block, hw - 1.7, 0, -0.6); k.box(1.3, 0.06, 0.8, cloth('CORAL'), hw - 1.7, 0.9, -0.6);
+      k.box(0.16, 1.5, 0.16, M.ink, hw - 0.8, 0.9, -1.0); k.box(0.7, 0.3, 0.4, M.ink, hw - 1.05, 2.3, -0.9);
+      k.person(hw - 1.7, 0.45);
+      k.each('parcel');
+      for (let i = 0; i < 4; i++) k.box(0.95, 0.75, 0.95, M.parcel, hw - 0.9 - (i % 2) * 1.05, Math.floor(i / 2) * 0.75, hd - 1.2);
+      break;
+    }
+    case 'plot': { // no vendor on record yet: a marked-out plot, nothing built
+      k.part('plot');
+      k.box(w * 0.86, 0.14, d * 0.8, M.pad);
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) k.box(0.22, 1.1, 0.22, M.block, x * w * 0.4, 0.14, z * d * 0.36);
+      break;
+    }
+    case 'desk': { // the office desk the dispatch paperwork comes from
+      k.part('deskoffice');
+      k.box(w * 0.82, 2.8, d * 0.46, M.block, 0, 0, -d * 0.2);
+      k.box(w * 0.88, 0.3, d * 0.52, M.data, 0, 2.8, -d * 0.2);
+      k.box(w * 0.5, 1.5, 0.1, M.glass, -w * 0.1, 0.7, d * 0.03 + 0.06);
+      k.part('papers');
+      k.box(2.6, 0.8, 1.1, M.block, -0.9, 0, hd - 1.5);
+      for (let i = 0; i < 3; i++) k.box(0.62, 0.1 + i * 0.07, 0.8, M.glow, -1.8 + i * 0.8, 0.8, hd - 1.5);
+      k.part('printer');
+      k.box(1.0, 1.0, 0.9, M.ink, hw - 1.3, 0, hd - 1.5); k.box(0.7, 0.05, 0.5, M.glow, hw - 1.3, 1.0, hd - 1.2);
+      k.person(-0.9, hd - 0.55);
+      break;
+    }
+    case 'resale': { // returned pieces, checked and fit to sell, waiting to be sold on
+      k.room(w, d);
+      k.part('returnrail');
+      k.box(0.14, 2.3, 0.14, M.ink, -hw + 0.9, 0.24, -0.9); k.box(0.14, 2.3, 0.14, M.ink, 0.9, 0.24, -0.9); k.box(w * 0.5 + 0.9, 0.12, 0.12, M.ink, -hw / 2 + 0.9, 2.5, -0.9);
+      SH.slice(0, 6).forEach((s, i) => k.box(0.42, 1.5, 0.1, cloth(s), -hw + 1.3 + i * 0.62, 1.0, -0.9));
+      k.part('checktable');
+      k.box(2.0, 0.85, 1.1, M.block, hw - 1.8, 0.24, 0.8); k.box(1.1, 0.06, 0.8, cloth('LILAC'), hw - 1.8, 1.09, 0.8);
+      k.person(hw - 1.8, -0.35);
+      k.each('parcel');
+      k.box(0.9, 0.7, 0.9, M.parcel, -hw + 1.2, 0.24, hd - 0.95); k.box(0.9, 0.7, 0.9, M.parcel, -hw + 2.3, 0.24, hd - 0.95);
       break;
     }
   }
