@@ -49,6 +49,8 @@ for running the business: data stays on one device. Every other copy uses its se
 | `POST /api/me/position` | Say which position I hold; it waits to be confirmed |
 | `POST /api/users/:id/join` | Confirm or decline a request to join `{ ok }` (the head of that work centre, or an admin) |
 | `GET /api/inbox`, `POST /api/inbox/read` | My notices |
+| `GET /api/tick` | Has anything changed since this page loaded? (what open pages ask on a timer) |
+| `POST /api/files`, `GET /api/files?entity=&id=`, `GET/DELETE /api/files/:id` | Photos and PDFs on a record, as base64 inside JSON. The picture is stored apart from its description, so lists never load pictures |
 | `POST /api/ai/map` | Match spreadsheet columns to a record type: `{ headers, sample, entity? }` |
 | `POST /api/setup` | Create the founder (once) |
 | `POST /api/login`, `POST /api/logout` | Session cookie `deme_sid` (HttpOnly, SameSite=Lax, 14 days) |
@@ -99,6 +101,7 @@ replaced without touching the others.
 | Planning | `shared/engine.js`, `web/js/plan.js` | The schedule and what-if |
 | Organisation | `shared/org.js` | Work centres, workstations, positions and what each position may do |
 | Go-live and tasks | `shared/golive.js` | The plan template and task steps |
+| The floor as it runs | `shared/floor.js` | Fabric delivered to a dye house, claims, problem reports, day plans and bundling, vendor work, parcel paperwork |
 | Working together | `shared/collab.js` | Requests to a work centre, what a task waits for, comments, notices |
 | Identity | `server/app.js` | Sign-in (password, Google), sessions, service keys |
 | Storage | `server/db.js`, `server/pgstore.js` | The same small interface over SQLite or Postgres |

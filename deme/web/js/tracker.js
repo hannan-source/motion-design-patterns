@@ -14,7 +14,7 @@ import { iso, today, addWorkdays, workdayIndex, DAY, clamp } from '../shared/uti
 
 const FN = Object.fromEntries(FUNCTIONS), TK = Object.fromEntries(TRACKS);
 const STATUSES = [['todo', 'To do'], ['doing', 'Doing'], ['blocked', 'Blocked'], ['done', 'Done']];
-const SCREENS = { home: 'Today', map: 'Business map', room: 'Production room', myday: 'My day', scan: 'Scan station', gate: 'Dispatch gate', pulse: 'Founder view' };
+const SCREENS = { home: 'Today', map: 'Business map', room: 'Production room', myday: 'My day', scan: 'Scan station', gate: 'Dispatch gate', pulse: 'Founder view', dayplan: 'Day plan', dye: 'Dye house' };
 const DONE_CAP = 30;
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

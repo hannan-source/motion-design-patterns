@@ -13,7 +13,7 @@ import { iso, today } from '../shared/util.js';
 import { TOURS } from './guides-content.js';
 
 const TK = Object.fromEntries(TRACKS);
-const SCREENS = { home: 'Today', map: 'Business map', room: 'Production room', myday: 'My day', scan: 'Scan station', gate: 'Dispatch gate', pulse: 'Founder view', org: 'Work centres', import: 'Bring in data', guide: 'Guide' };
+const SCREENS = { home: 'Today', map: 'Business map', room: 'Production room', myday: 'My day', scan: 'Scan station', gate: 'Dispatch gate', pulse: 'Founder view', dayplan: 'Day plan', dye: 'Dye house', org: 'Work centres', import: 'Bring in data', guide: 'Guide' };
 const initials = (name) => String(name || '').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase();
 const av = (id, size = 28) => { const n = data.title('users', id); return n ? `<span class="av" style="--av:${size}px" title="${esc(n)}">${esc(initials(n))}</span>` : `<span class="av av-none" style="--av:${size}px" title="Nobody yet">?</span>`; };
 const day = (s) => fmtDate(`${s}T00:00:00`);

@@ -42,6 +42,8 @@ preview link, publish on merge). The same code also runs as one Docker container
 | **Today** | What needs attention across the business, sales of the day, a getting-started checklist while lists are empty |
 | **Business map** | 3D model of suppliers, dye house, factory floor, channels and office. Places, flows, zones and parts are clickable and show live figures from the records |
 | **Production room** | Finite-capacity plan from open work orders, styles and work centres. Test a sample run, extra units, a demand jump, absences or a late fabric lot and see what moves |
+| **Day plan** | Tomorrow's cutting, decided the evening before: which master cuts which order, checked line by line against fabric really in the store. Issuing it sets the metres aside, makes one bundle per line and gives the fabric runner the bundling list. No slip goes out without fabric behind it |
+| **Dye house** | A phone screen for the dye house and for Deme's checker there: the lots at the dye house, and a problem reported in a few taps with photos |
 | **Scan station** | Tailors and masters scan bundles in and out; gives real minutes per piece |
 | **Dispatch gate** | One scan point for parcels out, returns in and store fit visits |
 | **Projects** | Kanban board and Gantt timeline over the same tasks, for the go-live and every project after it. Anyone can add a task, ask another work centre for something ("I need 80 samples"), comment, mention people and say what a task waits for. Only the people on a task can change it. Notices arrive in the app and by email |
@@ -75,12 +77,32 @@ logistics, B2B and merchandising, sales, finance, marketing, design, HR admin, a
 (self-service only). **Admin > Roles** shows the full grid. One person can be given extra
 modules without changing role ("Also allow").
 
+### How fabric and work really move
+
+The model follows how Deme runs, as its merchandising head described it:
+
+- **Fabric.** Ready-for-dyeing fabric goes from the mill straight to the dye house; other fabric
+  comes to the store. A receipt says where it was delivered. A roll is passed either on the mill's
+  QC report or by Deme's own check, at the dye house or the store.
+- **Failures are claims.** Fabric that fails, before dyeing or after it, is the mill's or the dye
+  house's to answer for. A claim opens with the reason and stays open until the credit note or the
+  replacement arrives. Only a failure nobody answers for is written off.
+- **Cutting.** Planned a day ahead against fabric in the store; issued as bundles of exactly the
+  cut quantity per master.
+- **Vendors.** Most wholesale work is made by production vendors. Each work order says which
+  vendor, and whether it is checked there by Deme's QC and shipped from there, or comes back for
+  QC in-house. Vendor work takes no in-house capacity in the plan.
+- **Dispatch.** The office adds the paperwork to a parcel (e-invoice number, and an e-way bill
+  number above ₹50,000, with the documents attached). The factory prints, attaches and scans it
+  out. A parcel without its paperwork is stopped at the gate. Returned pieces are approved as fit
+  to sell, then sold on.
+- **Photos and documents** can be attached to any record.
+
 ### What happens automatically
 
 Posting a goods receipt creates fabric rolls for inspection or adds stock, opens the supplier
-bill and writes the purchase voucher. A roll that fails inspection before dyeing raises a debit
-note. Only inspected rolls can go on a dye lot; a roll that fails after dyeing is written off to
-its own ledger. Confirming a sales order raises work orders. Scanning a Shopify parcel out marks
+bill and writes the purchase voucher. A roll that fails opens a claim on the supplier at fault, with its debit note. Only rolls that
+were checked, or accepted on the mill's QC report, can go on a dye lot. Confirming a sales order raises work orders. Scanning a Shopify parcel out marks
 the order shipped and books the sale. A store piece scanned in counts a fit visit. Vouchers
 export as Tally import XML. Every change is in the audit trail.
 
