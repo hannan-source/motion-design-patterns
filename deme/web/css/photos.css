@@ -1,0 +1,63 @@
+/* Photos and documents on a record. The strip is scoped under .photos, the full-size viewer
+   under .photos-view (it sits on the page itself, above drawers). Tokens from app.css only. */
+.photos { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.photos .ph-head { display: flex; align-items: center; gap: 8px; }
+.photos .ph-count { margin-left: auto; font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; color: var(--ink-3); }
+.photos .ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.photos .ph-grid:empty { display: none; }
+.photos .ph-item { position: relative; aspect-ratio: 1; min-width: 0; }
+.photos .ph-tile { position: relative; width: 100%; height: 100%; padding: 0; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); overflow: hidden; display: grid; place-items: center; color: var(--ink-2); transition: border-color .2s; }
+.photos .ph-tile:hover:not(:disabled) { border-color: var(--ink); }
+.photos .ph-tile:disabled { cursor: default; }
+.photos .ph-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photos .ph-tile img[data-ph-thumb] { opacity: 0; }
+.photos .ph-doc { align-content: center; justify-items: center; gap: 4px; padding: 6px; }
+.photos .ph-name { max-width: 100%; font-size: 11px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+.photos .ph-flag { position: absolute; left: 4px; right: 4px; bottom: 4px; padding: 2px 4px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line); font: 400 10px/1.5 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; text-align: center; color: var(--ink-2); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.photos .is-fail .ph-tile { border-color: var(--crit); }
+.photos .is-fail .ph-flag { color: var(--crit); border-color: var(--crit); }
+.photos .is-sent .ph-flag { color: var(--ok); border-color: var(--ok); }
+.photos .is-prep .ph-tile, .photos .is-send .ph-tile img { opacity: .55; }
+.photos .is-send .ph-tile::after, .photos .is-prep .ph-tile::after { content: ""; position: absolute; top: calc(50% - 20px); left: calc(50% - 11px); width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--ink); animation: ph-spin .9s linear infinite; }
+@keyframes ph-spin { to { transform: rotate(360deg); } }
+.photos .ph-x { position: absolute; top: -7px; right: -7px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-size: 16px; line-height: 1; box-shadow: var(--shadow-1); }
+.photos .ph-x::after { content: ""; position: absolute; inset: -8px; }
+.photos .ph-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; font-size: 12.5px; color: var(--ink-2); }
+.photos .ph-status:empty { display: none; }
+.photos .ph-status .bar { flex: 1 1 120px; }
+.photos .ph-bad { color: var(--crit); }
+.photos .ph-none { color: var(--ink-3); }
+.photos .ph-add { display: flex; flex-wrap: wrap; gap: 8px; }
+.photos .ph-btn svg { flex: none; }
+/* On a desk the camera button would only open the same file picker, so one button is enough. */
+@media (hover: hover) and (pointer: fine) { .photos .ph-cam { display: none; } }
+
+/* Larger, for a phone held in one hand */
+.photos-big .ph-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; }
+.photos-big .ph-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.photos-big .ph-btn { min-height: 60px; font-size: 13px; white-space: normal; }
+.photos-big .ph-x { width: 34px; height: 34px; top: -9px; right: -9px; font-size: 18px; }
+.photos-big .ph-status { font-size: 14px; }
+
+/* Full-size viewer */
+.photos-view { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); border: 0; background: var(--surface); color: var(--ink); display: flex; flex-direction: column; overflow: hidden; }
+.photos-view:not([open]) { display: none; }
+.photos-view .pv-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.photos-view .pv-what { min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.3; }
+.photos-view .pv-what strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photos-view .pv-what span { font-size: 12.5px; color: var(--ink-3); }
+.photos-view .pv-bar .icon-btn { width: 44px; height: 44px; font-size: 20px; line-height: 1; }
+.photos-view .pv-stage { flex: 1; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; padding: 12px; background: var(--surface-2); position: relative; }
+.photos-view .pv-stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.photos-view .pv-doc { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; text-align: center; max-width: 100%; color: var(--ink-2); }
+.photos-view .pv-doc svg { width: 64px; height: 64px; }
+.photos-view .pv-doc strong { font: 300 22px/1.25 var(--font-display); color: var(--ink); overflow-wrap: anywhere; }
+.photos-view .pv-doc span { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.photos-view .pv-msg { color: var(--ink-3); }
+.photos-view .pv-err { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 8px 12px; border-radius: var(--r-md); background: var(--surface); color: var(--crit); text-align: center; }
+.photos-view .pv-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.photos-view .pv-foot .btn { min-height: 40px; }
+.photos-view .pv-foot a:not([href]) { opacity: .45; pointer-events: none; }
+.photos-view .pv-n { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; color: var(--ink-3); white-space: nowrap; }
+.photos-view .pv-gap { flex: 1; }
+@media (prefers-reduced-motion: reduce) { .photos .is-send .ph-tile::after, .photos .is-prep .ph-tile::after { animation: none; } }

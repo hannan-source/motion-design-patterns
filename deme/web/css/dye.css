@@ -1,0 +1,113 @@
+/* Dye house: a phone held in one hand. Large type, large targets. Everything is scoped under .dye
+   and uses app.css tokens only. */
+.dye .workspace-inner { max-width: 1180px; }
+.dye .dy-sum { display: flex; flex-wrap: wrap; gap: 6px; }
+.dye .dy-cols { display: grid; grid-template-columns: minmax(0, 720px); gap: 22px; align-items: start; }
+.dye .has-side .dy-cols { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); }
+.dye .dy-col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.dye .dy-col:empty { display: none; }
+.dye .dy-sect { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dye .dy-sect-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dye .dy-sect-head h2 { font-size: 18px; font-weight: 500; letter-spacing: 0; }
+.dye .dy-n, .dye .dy-rep-at, .dye .dy-due { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.dye .dy-none { padding: 20px 18px; color: var(--ink-3); }
+.dye .dy-more { font-size: 13px; color: var(--ink-3); }
+.dye .dy-acts { display: flex; flex-wrap: wrap; gap: 10px; }
+.dye .dy-acts:empty { display: none; }
+.dye .dy-btn { min-height: 52px; padding: 6px 18px; font-size: 13px; line-height: 1.3; white-space: normal; text-align: center; }
+
+/* A mark for the shade: its letters on a woven tint of one track colour */
+.dye .dy-swatch { flex: none; width: 56px; height: 56px; display: grid; place-items: center; border-radius: var(--r-md); border: 1px solid var(--line);
+  background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--surface) 26%, transparent) 0 2px, transparent 2px 7px), repeating-linear-gradient(-45deg, color-mix(in srgb, var(--surface) 16%, transparent) 0 2px, transparent 2px 7px), var(--sw, var(--ink-3));
+  color: var(--surface); font: 500 15px/1 var(--font-mono); letter-spacing: .04em; text-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 45%, transparent); }
+
+.dye .dy-swatch.is-light { color: var(--ink); text-shadow: none; }
+
+/* Lots: one large card each, the whole card is the button */
+.dye .dy-lots { display: flex; flex-direction: column; gap: 12px; }
+.dye .dy-lot { position: relative; width: 100%; display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 8px 14px; padding: 16px; min-height: 96px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); text-align: left; transition: border-color .2s, box-shadow .2s; animation: rise .45s var(--ease-out) both; }
+.dye .dy-lot:hover { border-color: var(--line-2); box-shadow: var(--shadow-1); }
+.dye .dy-lot.is-late { border-left: 5px solid var(--crit); }
+.dye .dy-lot-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dye .dy-lot-no { font: 400 22px/1.15 var(--font-mono); overflow-wrap: anywhere; }
+.dye .dy-lot-shade { font-size: 16px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.dye .dy-lot-facts { font-size: 13.5px; color: var(--ink-2); }
+.dye .dy-lot-end { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.dye .dy-go { display: inline-flex; align-items: center; gap: 6px; font: 400 11px/1.3 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.dye .dy-go svg { flex: none; transition: transform .25s var(--ease-out); }
+.dye .dy-lot:hover .dy-go { color: var(--ink); }
+.dye .dy-lot:hover .dy-go svg { transform: translateX(3px); }
+
+/* Fabric waiting */
+.dye .dy-rolls { overflow: hidden; }
+.dye .dy-roll { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.dye .dy-roll + .dy-roll { border-top: 1px solid var(--line); }
+.dye .dy-roll-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dye .dy-roll-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dye .dy-roll-main strong { font: 400 20px/1.2 var(--font-mono); overflow-wrap: anywhere; }
+.dye .dy-roll-main span { font-size: 13.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.dye .dy-inspect { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
+.dye .dy-in { min-height: 52px; font-size: 18px; }
+.dye .dy-verdict:empty { display: none; }
+
+/* Report a problem */
+.dye .dy-flow { display: flex; flex-direction: column; gap: 22px; padding: 18px; animation: rise .4s var(--ease-out) both; }
+.dye .dy-flow-head { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.dye .dy-back { padding-inline: 14px; margin-left: -14px; }
+.dye .dy-flow-what { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.dye .dy-flow-what h2 { font: 300 clamp(26px, 7vw, 34px)/1.1 var(--font-display); letter-spacing: -.02em; margin-top: 4px; overflow-wrap: anywhere; }
+.dye .dy-flow-what h2:focus-visible { outline: none; }
+.dye .dy-flow-sub { font-size: 14px; color: var(--ink-2); margin-top: 4px; }
+.dye .dy-step { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dye .dy-label, .dye .dy-step.field > label { font: 400 12px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.dye .dy-pair, .dye .dy-reasons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dye .dy-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+.dye .dy-choice { min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); color: var(--ink); font-size: 16px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; transition: background .15s, color .15s, border-color .15s; }
+.dye .dy-choice small { font: 400 11px/1.3 var(--font-mono); color: var(--ink-3); }
+.dye .dy-choice:hover:not(:disabled) { border-color: var(--ink); }
+.dye .dy-choice[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); font-weight: 500; }
+.dye .dy-choice[aria-pressed="true"] small { color: inherit; opacity: .7; }
+.dye .dy-choice:disabled { cursor: default; }
+.dye .dy-choice:disabled:not([aria-pressed="true"]) { opacity: .4; }
+.dye .dy-note { min-height: 96px; font-size: 16px; }
+.dye .dy-send-row { display: flex; flex-direction: column; gap: 10px; }
+.dye .dy-send { min-height: 68px; font-size: 15px; white-space: normal; }
+.dye #dyMsg:empty { display: none; }
+.dye .dy-result { border: 1px solid var(--line); border-left: 6px solid var(--ok); border-radius: var(--r-lg); background: var(--ok-soft); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; animation: rise .4s var(--ease-out) both; }
+.dye .dy-result[data-tone="crit"] { border-left-color: var(--crit); background: var(--crit-soft); }
+.dye .dy-result-head { font: 300 clamp(21px, 5.4vw, 26px)/1.2 var(--font-display); letter-spacing: -.02em; }
+
+/* Sent */
+.dye .dy-done { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 26px 20px; border: 1px solid var(--line); border-left: 6px solid var(--ok); border-radius: var(--r-lg); background: var(--ok-soft); animation: rise .4s var(--ease-out) both; }
+.dye .dy-tick { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--ok); color: var(--surface); }
+.dye .dy-done .eyebrow { color: var(--ink-2); }
+.dye .dy-done h2 { font: 300 clamp(28px, 7.4vw, 38px)/1.1 var(--font-display); letter-spacing: -.02em; overflow-wrap: anywhere; }
+.dye .dy-done h2:focus-visible { outline: none; }
+.dye .dy-done-what { font-size: 17px; }
+.dye .dy-done-n { font-size: 14px; color: var(--ink-2); }
+.dye .dy-done .dy-acts { width: 100%; padding-top: 10px; }
+.dye .dy-done .dy-btn { flex: 1 1 200px; min-height: 60px; }
+
+/* Reports */
+.dye .dy-reps { display: flex; flex-direction: column; gap: 12px; }
+.dye .dy-rep { display: flex; flex-direction: column; gap: 8px; padding: 16px; min-width: 0; }
+.dye .dy-rep-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.dye .dy-rep-head strong { font: 400 17px/1.2 var(--font-mono); }
+.dye .dy-rep-at { margin-left: auto; }
+.dye .dy-rep-what { font-size: 15px; font-weight: 500; line-height: 1.35; overflow-wrap: anywhere; }
+.dye .dy-rep-note { color: var(--ink-2); overflow-wrap: anywhere; }
+.dye .dy-rep-by { font-size: 12.5px; color: var(--ink-3); }
+.dye .dy-rep [data-photos-of]:empty { display: none; }
+.dye .dy-rep .dy-btn { min-height: 44px; }
+
+@media (max-width: 1080px) {
+  .dye .dy-cols, .dye .has-side .dy-cols { grid-template-columns: minmax(0, 720px); }
+  .dye .is-flow #dySide, .dye .is-flow .dy-sum { display: none; }
+}
+@media (max-width: 520px) {
+  .dye .dy-lot { grid-template-columns: 56px minmax(0, 1fr); padding: 14px; }
+  .dye .dy-lot-end { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line); }
+  .dye .dy-flow { padding: 16px 14px; }
+  .dye .dy-roll .dy-btn, .dye .dy-inspect .dy-btn { flex: 1 1 100%; }
+  .dye .dy-roll, .dye .dy-rep { padding: 14px; }
+}

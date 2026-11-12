@@ -42,14 +42,17 @@ export function papersMissing(parcel) {
 /** For each line of a day plan: the fabric it needs, what is really in the store for it, and the rolls to take it from. */
 function fabricCheck(ctx, doc) {
   const free = new Map(ctx.all('rolls').filter((r) => ['dyed', 'passed'].includes(r.status) && !r.heldAt && leftOn(r) > 0).map((r) => [r.id, { roll: r, left: leftOn(r) }]));
-  const planned = {};
+  const planned = {}, issuedOn = {};
   return (doc.lines || []).map((line, i) => {
     const wo = ctx.get('work_orders', line.workOrder) || ctx.fail(`Line ${i + 1} has no work order.`);
     if (wo.madeBy === 'vendor') ctx.fail(`${wo.no} is made by a vendor, so it is not cut here. Take it off the plan.`);
     if (['done', 'hold'].includes(wo.status)) ctx.fail(`${wo.no} is ${wo.status === 'done' ? 'finished' : 'on hold'}. Take it off the plan.`);
     if (!(line.pieces > 0) || !Number.isInteger(line.pieces)) ctx.fail(`Line ${i + 1} (${wo.no}) needs a whole number of pieces above zero.`);
     planned[wo.id] = (planned[wo.id] || 0) + line.pieces;
-    if ((wo.cut || 0) + planned[wo.id] > wo.qty) ctx.fail(`${wo.no} is for ${qty(wo.qty)} pieces and ${qty(wo.cut || 0)} are already cut; this plan asks for ${qty(planned[wo.id])} more. Lower the pieces.`);
+    // Pieces already given out on earlier plans count, whether or not their cutting has been recorded yet.
+    const given = issuedOn[wo.id] ??= ctx.all('bundles').filter((b) => b.plan && b.plan !== doc.id && b.workOrder === wo.id).reduce((n, b) => n + (b.pieces || 0), 0);
+    const taken = Math.max(wo.cut || 0, given);
+    if (taken + planned[wo.id] > wo.qty) ctx.fail(`${wo.no} is for ${qty(wo.qty)} pieces and ${qty(taken)} are already cut or with masters; this plan asks for ${qty(planned[wo.id])} more. Lower the pieces.`);
     const style = ctx.get('styles', wo.style);
     const row = { workOrder: wo.id, master: String(line.master || '').trim(), pieces: line.pieces, need: 0, have: 0, ok: '', take: [] };
     if (!row.master) ctx.fail(`Line ${i + 1} (${wo.no}) needs the master who will cut it.`);

@@ -1,0 +1,181 @@
+/* Day plan. Everything is scoped under .dayplan (the screen) or .dp-print (its print-outs). */
+.dayplan .workspace-inner { max-width: 1280px; }
+.dayplan .dp-body { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.dayplan { --st: var(--ink-3); }
+.dayplan .is-ok { --st: var(--ok); } .dayplan .is-part { --st: var(--warn); } .dayplan .is-bad { --st: var(--warn); }
+.dayplan .is-none, .dayplan .is-short, .dayplan .is-nostyle { --st: var(--crit); }
+
+/* Which day */
+.dayplan .dp-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.dayplan .dp-date { font: 300 24px/1.1 var(--font-display); letter-spacing: -.02em; }
+.dayplan .dp-days { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: center; gap: 8px; }
+.dayplan .dp-week { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.dayplan .dp-day { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 8px 2px 7px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink-2); transition: border-color .2s, background .2s; }
+.dayplan .dp-day:hover { border-color: var(--line-2); }
+.dayplan .dp-day[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); background: var(--surface-2); box-shadow: inset 0 -3px 0 var(--ink); }
+.dayplan .dp-dow { font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.dayplan .dp-day.is-today .dp-dow { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.dayplan .dp-dnum { font: 300 22px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.dayplan .dp-dots { display: flex; gap: 3px; height: 7px; }
+.dayplan .dp-dots i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--line-2); }
+.dayplan .dp-dots .is-draft { background: var(--info); border-color: var(--info); }
+.dayplan .dp-dots .is-issued { background: var(--ok); border-color: var(--ok); }
+.dayplan .dp-switch { align-self: flex-start; }
+
+/* Two sides: what could be cut, and the masters */
+.dayplan .dp-build { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
+.dayplan .dp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 10px; min-height: 36px; }
+.dayplan .dp-head h2 { font-size: 19px; font-weight: 400; }
+.dayplan .dp-orders, .dayplan .dp-board { min-width: 0; }
+.dayplan .dp-add { display: flex; gap: 6px; min-width: 0; }
+.dayplan .dp-add .input { width: 170px; min-height: 30px; padding-block: 4px; flex: 1 1 120px; }
+.dayplan .dp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dayplan .dp-sugg { margin-bottom: 10px; }
+.dayplan button.chip { text-transform: none; letter-spacing: .02em; font-size: 12px; color: var(--ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dayplan button.chip:hover { border-color: var(--ink); }
+.dayplan .dp-chip-new { border-style: dashed; color: var(--ink-2); }
+.dayplan .dp-chip-new::before { content: "+"; color: var(--ink-3); }
+
+/* An order that could be cut */
+.dayplan .dp-cards { display: flex; flex-direction: column; gap: 10px; }
+.dayplan .dp-card { border: 1px solid var(--line); border-left: 3px solid var(--st); border-radius: var(--r-md); background: var(--surface); overflow: hidden; transition: border-color .2s, box-shadow .2s; }
+.dayplan .dp-card[draggable="true"] { cursor: grab; }
+.dayplan .dp-card:hover { border-color: var(--line-2); border-left-color: var(--st); }
+.dayplan .dp-card.is-picked { border-color: var(--ink); border-left-color: var(--st); box-shadow: var(--shadow-1); }
+.dayplan .dp-card-main { display: grid; gap: 6px; width: 100%; padding: 12px 14px; border: 0; background: none; text-align: left; cursor: inherit; }
+.dayplan .dp-card-main[aria-disabled="true"] { cursor: default; }
+.dayplan .dp-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.dayplan .dp-card-top strong { font-weight: 500; font-size: 13px; letter-spacing: .03em; }
+.dayplan .dp-due { font: 400 11px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.dayplan .dp-due.is-late { color: var(--crit); }
+.dayplan .dp-card-style { font-size: 16px; line-height: 1.25; }
+.dayplan .dp-card-style small { font: 400 11px var(--font-mono); color: var(--ink-3); margin-left: 4px; }
+.dayplan .dp-card-for { font-size: 12.5px; color: var(--ink-2); }
+.dayplan .dp-pieces { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+.dayplan .dp-pieces b { font: 300 28px/1 var(--font-display); letter-spacing: -.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dayplan .dp-pieces em { font-style: normal; margin-left: auto; font: 400 11px var(--font-mono); color: var(--ink); }
+.dayplan .dp-split { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--ink-3) 0 var(--cut), var(--ink) var(--cut) var(--plan), var(--surface-3) var(--plan) 100%); }
+.dayplan .dp-gauge { position: relative; display: block; height: 9px; margin-top: 4px; border-radius: 5px; background: var(--surface-3); overflow: hidden; }
+.dayplan .dp-gauge i { position: absolute; inset: 0 auto 0 0; width: var(--v, 0%); border-radius: 5px; background: var(--st); transition: width .5s var(--ease-out); }
+.dayplan .dp-gauge .dp-gauge-all { opacity: .28; }
+.dayplan .dp-gauge-text { font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+.dayplan .dp-gauge-text b { font-weight: 500; color: var(--st); }
+.dayplan .dp-gauge-text small { display: block; font-size: 12px; color: var(--ink-3); }
+.dayplan .dp-card.is-none, .dayplan .dp-card.is-nostyle { background: var(--surface-2); border-style: dashed; border-left-style: solid; }
+.dayplan .dp-card.is-none .dp-gauge, .dayplan .dp-card.is-nostyle .dp-gauge { background: repeating-linear-gradient(135deg, var(--line-2) 0 3px, transparent 3px 7px); }
+.dayplan .dp-card.is-none .dp-card-style, .dayplan .dp-card.is-none .dp-pieces, .dayplan .dp-card.is-none .dp-card-top strong, .dayplan .dp-card.is-none .dp-card-for,
+.dayplan .dp-card.is-nostyle .dp-card-style, .dayplan .dp-card.is-nostyle .dp-pieces, .dayplan .dp-card.is-nostyle .dp-card-top strong, .dayplan .dp-card.is-nostyle .dp-card-for { opacity: .5; }
+.dayplan .dp-card.is-full .dp-pieces b { color: var(--ink-3); }
+.dayplan .dp-card-fix { padding: 0 14px 12px; }
+
+/* Giving a picked order to a master */
+.dayplan .dp-give { scroll-margin-bottom: 96px; display: grid; gap: 12px; padding: 12px 14px 14px; border-top: 1px solid var(--line); background: var(--surface-2); }
+.dayplan .dp-give-n { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12.5px; }
+.dayplan .dp-give-to { display: grid; gap: 8px; }
+.dayplan .dp-step { display: inline-flex; align-items: stretch; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); overflow: hidden; flex: none; }
+.dayplan .dp-step button { width: 30px; min-height: 32px; border: 0; background: none; color: var(--ink-2); font: 400 16px/1 var(--font-mono); }
+.dayplan .dp-step button:hover { background: var(--surface-3); color: var(--ink); }
+.dayplan .dp-step input { width: 52px; border: 0; border-inline: 1px solid var(--line); background: none; text-align: center; font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; padding: 0 4px; min-width: 0; }
+.dayplan .dp-step input:focus { outline: 2px solid var(--ink); outline-offset: -2px; }
+.dayplan .dp-step input[aria-invalid="true"] { color: var(--crit); }
+.dayplan .dp-step :focus-visible { outline-offset: -2px; }
+
+/* Lanes */
+.dayplan .dp-lanes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; align-items: start; }
+.dayplan .dp-lane { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 132px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface-2); transition: border-color .2s, background .2s; }
+.dayplan .dp-lane.is-target { border-style: dashed; border-color: var(--line-2); }
+.dayplan .dp-lane.is-over { border-color: var(--ink); background: var(--surface-3); }
+.dayplan .dp-lane > header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dayplan .dp-lane > header > div { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; flex: 1; }
+.dayplan .dp-lane > header strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dayplan .dp-lane > header .faint { font: 400 11px var(--font-mono); }
+.dayplan .dp-lanebar { height: 4px; border-radius: 2px; background: var(--crit); overflow: hidden; }
+.dayplan .dp-lanebar i { display: block; height: 100%; width: var(--v, 0%); background: var(--ok); transition: width .5s var(--ease-out); }
+.dayplan .dp-lines { display: flex; flex-direction: column; gap: 8px; }
+.dayplan .dp-lines:empty { display: none; }
+.dayplan .dp-line { padding: 10px; border: 1px solid var(--line); border-left: 3px solid var(--st); border-radius: var(--r-md); background: var(--surface); min-width: 0; }
+.dayplan .dp-line-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.dayplan .dp-line-head[draggable="true"] { cursor: grab; }
+.dayplan .dp-line-head > div { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; flex: 1; }
+.dayplan .dp-line-head strong { font-weight: 500; font-size: 12.5px; letter-spacing: .03em; }
+.dayplan .dp-line-head span { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dayplan .dp-mark { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--st); color: var(--surface); font: 600 12px/1 var(--font-mono); flex: none; }
+.dayplan .dp-x { display: inline-grid; place-items: center; width: 28px; height: 28px; margin: -4px -4px -4px 0; border: 0; border-radius: 50%; background: none; color: var(--ink-3); font-size: 18px; line-height: 1; flex: none; }
+.dayplan .dp-x:hover { background: var(--surface-3); color: var(--ink); }
+.dayplan .dp-line-body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 9px; }
+.dayplan .dp-unit { font: 400 11px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.dayplan .dp-need { font-size: 13px; margin-right: auto; }
+.dayplan .dp-line .tag { white-space: normal; }
+.dayplan .dp-fit { display: block; margin-top: 8px; font-size: 12.5px; font-weight: 400; }
+.dayplan .dp-drop { width: 100%; margin-top: auto; padding: 10px; border: 1.5px dashed var(--line-2); border-radius: var(--r-md); background: none; color: var(--ink-2); font: 400 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.dayplan .dp-drop:hover, .dayplan .dp-drop:focus-visible { border-color: var(--ink); color: var(--ink); background: var(--surface); }
+.dayplan .dp-nolanes { padding-block: 34px; }
+
+/* The fabric check total and the issue step: stays in reach at the bottom */
+.dayplan .dp-bar { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-2); }
+.dayplan .dp-tally { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px; margin-right: auto; }
+.dayplan .dp-n { display: inline-flex; align-items: baseline; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+.dayplan .dp-n b { font: 300 26px/1 var(--font-display); letter-spacing: -.03em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dayplan .dp-n.is-ok b { color: var(--ok); } .dayplan .dp-n.is-short b { color: var(--crit); } .dayplan .dp-n.is-bad b { color: var(--warn); }
+.dayplan .dp-save, .dayplan .dp-why { font: 400 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.dayplan .dp-save:empty { display: none; }
+.dayplan .dp-save.is-err, .dayplan .dp-why { color: var(--crit); }
+.dayplan .dp-bar.is-confirm { flex-direction: column; align-items: stretch; gap: 14px; padding: 18px; border-color: var(--ink); max-height: min(78vh, 560px); overflow-y: auto; }
+.dayplan .dp-conf { display: flex; flex-direction: column; gap: 8px; }
+.dayplan .dp-big { font: 300 28px/1.15 var(--font-display); letter-spacing: -.02em; }
+.dayplan .dp-stay-h { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-weight: 500; --st: var(--crit); }
+.dayplan .dp-stay { display: flex; flex-direction: column; }
+.dayplan .dp-stay li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.dayplan .dp-stay li span:not(.tag) { color: var(--ink-2); flex: 1 1 140px; }
+
+/* Issued: the bundling list */
+.dayplan .dp-tagno { font-size: 14px; }
+.dayplan .dp-fig { display: inline-flex; align-items: baseline; gap: 4px; font: 400 11px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.dayplan .dp-fig b { font: 300 22px/1 var(--font-display); letter-spacing: -.02em; color: var(--ink); text-transform: none; }
+.dayplan .dp-bundle .dp-line-body { gap: 6px 16px; }
+.dayplan .dp-rolls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
+.dayplan .dp-roll { padding: 2px 9px; border-radius: 999px; background: var(--surface-2); font: 400 11.5px/1.6 var(--font-mono); }
+.dayplan .dp-back .dp-stay { border: 1px solid var(--line); border-radius: var(--r-md); padding: 0 14px; }
+.dayplan .dp-back .dp-stay li:first-child { border-top: 0; }
+
+@media (min-width: 980px) {
+  .dayplan .dp-build { grid-template-columns: minmax(300px, 372px) minmax(0, 1fr); }
+  .dayplan .dp-board { position: sticky; top: 0; }
+}
+@media (max-width: 520px) {
+  .dayplan .dp-date { font-size: 20px; }
+  .dayplan .dp-add { flex: 1 1 100%; }
+  .dayplan .dp-bar { bottom: 8px; padding: 10px 12px; }
+  .dayplan .dp-n b { font-size: 22px; }
+  .dayplan .dp-bar .btn-primary { flex: 1 1 auto; }
+}
+
+/* Print-outs. The area is hidden on screen and is the only thing on paper (see #printArea in erp.css). */
+.dp-print { color: var(--ink); font: 400 10.5pt/1.4 var(--font-body); }
+.dp-print .mono { font-family: var(--font-mono); }
+.dp-print .dp-sheet > header { display: flex; align-items: baseline; justify-content: space-between; gap: 6mm; padding-bottom: 3mm; border-bottom: 0.4mm solid var(--ink); }
+.dp-print .dp-sheet h1 { font: 400 20pt/1.1 var(--font-display); }
+.dp-print .dp-sheet section { margin-top: 6mm; break-inside: avoid; }
+.dp-print .dp-sheet h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 6mm; font: 500 13pt/1.2 var(--font-display); margin-bottom: 2mm; }
+.dp-print .dp-sheet h2 span { font: 400 9pt var(--font-mono); }
+.dp-print table { width: 100%; border-collapse: collapse; }
+.dp-print th { text-align: left; font: 400 8pt var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 1.5mm 2mm; border-bottom: 0.3mm solid var(--ink); }
+.dp-print td { padding: 2mm; border-bottom: 0.2mm solid var(--line-2); vertical-align: top; }
+.dp-print .n { text-align: right; font-family: var(--font-mono); }
+.dp-print td.n { font-size: 12pt; }
+.dp-print small { font-size: 8.5pt; }
+.dp-print .dp-box { display: inline-block; width: 5mm; height: 5mm; border: 0.3mm solid var(--ink); }
+.dp-print .dp-sheet ul { display: flex; flex-direction: column; gap: 1mm; }
+.dp-print .dp-slips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5mm; }
+.dp-print .dp-slip { display: flex; flex-direction: column; gap: 3mm; padding: 5mm; border: 0.3mm dashed var(--ink-3); border-radius: 1.5mm; break-inside: avoid; }
+.dp-print .dp-slip > header { display: flex; flex-direction: column; gap: 0.5mm; }
+.dp-print .dp-slip > header span { font: 400 8pt var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.dp-print .dp-slip > header strong { font: 500 15pt/1.15 var(--font-display); }
+.dp-print .dp-slip-code { display: flex; flex-direction: column; align-items: center; gap: 1mm; padding: 2mm 0; border-block: 0.2mm solid var(--line-2); }
+.dp-print .dp-slip-code svg { max-width: 100%; height: 15mm; }
+.dp-print .dp-slip-code span { font-size: 12pt; letter-spacing: .08em; }
+.dp-print dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.5mm 5mm; margin: 0; }
+.dp-print dl .wide { grid-column: 1 / -1; }
+.dp-print dt { font: 400 7.5pt var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.dp-print dd { margin: 0; font-size: 10.5pt; }
+.dp-print dd.big { font: 300 22pt/1.05 var(--font-display); }

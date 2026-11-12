@@ -98,8 +98,11 @@ document.addEventListener('keydown', (e) => {
   burst = now - burstAt < 60 ? burst + e.key : e.key; burstAt = now;
 });
 
+let lastLook = 0;
 async function route() {
   if (!data.ready) return;
+  // Moving to another screen is a good moment to pick up what other people have changed.
+  if (Date.now() - lastLook > 5000) { lastLook = Date.now(); data.poll().catch(() => {}); }
   let r = parse();
   const m = menu();
   const allowed = new Set([...m.top, ...m.floor, ...m.mods, ...m.start].map((x) => x[0]));

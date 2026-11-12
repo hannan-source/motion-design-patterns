@@ -7,6 +7,7 @@ import { MODULES, ROLES, LEVELS, ENTITIES, entityById, fieldsOf, levelOf } from 
 import { titleOf } from '../shared/service.js';
 import { POSITIONS, positionById } from '../shared/org.js';
 import { barcodeSvg } from '../shared/code128.js';
+import { mountPhotos } from './photos.js';
 
 // Record types that carry a tag Deme prints itself: what the barcode holds and the lines under it.
 const LABELS = {
@@ -129,6 +130,7 @@ export function mount(el, ctx) {
         <dl class="facts">${plain.map((f) => `<div><dt>${esc(f.label)}</dt><dd>${show(f, doc[f.k])}</dd></div>`).join('')}</dl>
         ${longs.map((f) => `<div class="long"><p class="eyebrow">${esc(f.label)}</p><p>${esc(doc[f.k])}</p></div>`).join('')}
         ${lines.map((f) => { const cols = f.cols.map(([k, label, type, o = {}]) => ({ k, label, type, ...o })); return `<div><p class="eyebrow">${esc(f.label)}</p><div class="table-wrap"><table class="table"><thead><tr>${cols.map((c) => `<th class="${c.type === 'number' || c.type === 'money' ? 'num' : ''}">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${doc[f.k].map((r) => `<tr>${cols.map((c) => `<td class="${c.type === 'number' || c.type === 'money' ? 'num' : ''}">${show(c, r[c.k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`; }).join('')}
+        <div data-photos></div>
         <div class="row">${editable ? '<button class="btn btn-sm btn-outline" type="button" data-edit>Edit</button>' : ''}${!e.readonly && data.can(e.module, 'admin') ? '<button class="btn btn-sm btn-quiet" type="button" data-delete>Delete</button>' : ''}</div>
         <div class="trail"><p class="eyebrow">Activity</p><ul class="trail-list"><li class="faint">Loading</li></ul></div>
       </div>`;
@@ -141,6 +143,7 @@ export function mount(el, ctx) {
     wireRecord(d, e, id);
   }
   function wireRecord(d, e, id) {
+    mountPhotos($('[data-photos]', d.el), e.id, id, { canAdd: true });   // photos and documents: anyone who can open the record can add
     api.audit(e.id, id).then((logs) => { const ul = $('.trail-list', d.el); if (ul) ul.innerHTML = logs.length ? logs.map((l) => `<li><span class="mono faint">${esc(fmtStamp(l.at))}</span><span>${esc(l.text)}</span><span class="faint">${esc(l.userName || '')}</span></li>`).join('') : '<li class="faint">Nothing yet</li>'; }).catch(() => {});
     d.el.onclick = (ev) => {
       const ab = ev.target.closest('[data-action]');

@@ -103,6 +103,9 @@ test('the day plan: no slip goes out without fabric, and each master gets exactl
   assert.equal(svc.get(admin, 'work_orders', a.id).status, 'released');
   assert.equal(svc.get(admin, 'work_orders', b.id).status, 'planned', 'the order without fabric stays back');
   assert.ok(inbox(runner).includes('Bundling list for 2026-11-12: 2 bundles, 150 m to cut and hand out'));
+  // pieces already with masters count against the order, even before their cutting is recorded
+  const again = add('day_plans', { date: '2026-11-13', lines: [{ workOrder: a.id, master: 'Master Salim', pieces: 1 }] });
+  assert.throws(() => act('plan.check', 'day_plans', again.id), /60 are already cut or with masters/);
   // a plan cannot ask for more than the order
   const over = add('day_plans', { date: '2026-11-13', lines: [{ workOrder: a.id, master: 'Master Salim', pieces: 61 }] });
   assert.throws(() => act('plan.check', 'day_plans', over.id), /Lower the pieces/);
