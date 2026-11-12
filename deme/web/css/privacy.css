@@ -1,0 +1,102 @@
+/* Privacy: what personal details are held, finding a customer, removing their details.
+   Everything is scoped under .privacy. */
+.privacy .workspace-inner { max-width: 1080px; }
+.privacy .pv-held-sec { display: flex; flex-direction: column; gap: 12px; }
+
+/* What is held, and where: one card per kind of person */
+.privacy .pv-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 14px; }
+.privacy .pv-card { position: relative; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; }
+.privacy.is-first .pv-card { animation: rise .5s var(--ease-out) both; }
+.privacy .pv-card::before { content: ""; position: absolute; inset: -40% 40% 55% -20%; background: var(--g); opacity: .16; filter: blur(46px); z-index: -1; }
+.privacy .pv-card header { display: flex; align-items: flex-start; gap: 14px; padding: 18px 18px 14px; }
+.privacy .pv-ico { flex: none; margin-top: 2px; color: var(--ink-2); }
+.privacy .pv-n { font: 300 40px/1.05 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; margin-top: 6px; }
+.privacy .pv-n-na { font-size: 18px; letter-spacing: 0; color: var(--ink-3); }
+.privacy .pv-card header .faint { font-size: 12.5px; margin-top: 2px; }
+.privacy .pv-card dl { margin: 0; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 72%, transparent); flex: 1; }
+.privacy .pv-card dl > div { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 18px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.privacy .pv-card dl > div:last-child { border-bottom: 0; }
+.privacy .pv-card dt { font-weight: 500; }
+.privacy .pv-card dd { margin: 0; color: var(--ink-2); min-width: 0; }
+.privacy .pv-card .link { font-weight: 400; color: var(--ink-2); }
+.privacy .pv-c b { font: 500 13px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* Find */
+.privacy .pv-about { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.privacy .panel-head { flex-wrap: wrap; }
+.privacy .pv-find { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 16px 18px; }
+.privacy .pv-find .field { flex: 1 1 240px; }
+.privacy .pv-find .btn { min-height: 38px; }
+.privacy .pv-out:focus { outline: none; }
+.privacy .pv-out:empty { display: none; }
+.privacy .pv-out { border-top: 1px solid var(--line); }
+.privacy .pv-res-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; padding: 16px 18px 12px; }
+.privacy .pv-counts { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; color: var(--ink-2); }
+.privacy .pv-counts b { font: 300 24px/1 var(--font-display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); margin-right: 3px; }
+.privacy .pv-key { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 0 18px 12px; font-size: 12.5px; color: var(--ink-2); }
+.privacy .pv-key .link { font-size: 12.5px; }
+
+/* A personal detail: tinted and underlined with dots, so the mark does not rest on colour alone */
+.privacy .pv-p { background: var(--accent-soft); color: var(--ink); padding: 1px 4px; border-radius: 3px; border-bottom: 1.5px dotted var(--accent); white-space: pre-line; overflow-wrap: anywhere; }
+.privacy .pv-gone { color: var(--ink-3); font-style: italic; }
+
+/* One block per order found */
+.privacy .pv-groups { border-top: 1px solid var(--line); }
+.privacy .pv-group { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.privacy .pv-group:has(input:checked) { background: var(--surface-2); }
+.privacy .pv-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; }
+.privacy .pv-top input { grid-column: 1; grid-row: 1 / span 2; align-self: start; margin: 5px 0 0; width: 18px; height: 18px; }
+.privacy .pv-top label { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; cursor: pointer; min-width: 0; }
+.privacy .pv-no { font: 500 13px var(--font-mono); }
+.privacy .pv-name { font-size: 18px; line-height: 1.3; }
+.privacy .pv-name .faint { font-size: 13.5px; }
+.privacy .pv-state { grid-column: 3; grid-row: 1; }
+.privacy .pv-facts { grid-column: 2 / -1; grid-row: 2; font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.privacy .pv-facts:empty { display: none; }
+.privacy .pv-part { margin-left: 30px; display: flex; flex-direction: column; gap: 4px; }
+.privacy .pv-part li { display: grid; grid-template-columns: 96px minmax(90px, 170px) minmax(0, 1fr) auto; align-items: baseline; gap: 4px 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.privacy .pv-part .mono { font-size: 12px; overflow-wrap: anywhere; }
+.privacy .pv-wide { min-width: 0; overflow-wrap: anywhere; }
+.privacy .pv-part .faint { font-size: 12.5px; }
+
+/* The confirmation: what goes, what stays, who asked */
+.privacy .pv-ask { margin: 16px 18px 18px; padding: 16px; border: 1px solid var(--ink); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 14px; animation: rise .35s var(--ease-out) both; }
+.privacy .pv-ask h3, .privacy .pv-done h3 { font-size: 18px; font-weight: 400; line-height: 1.3; }
+.privacy .pv-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.privacy .pv-two > div { padding: 12px 14px; border-radius: var(--r-md); display: flex; flex-direction: column; gap: 8px; }
+.privacy .pv-goes { background: var(--crit-soft); }
+.privacy .pv-stays { background: var(--ok-soft); }
+.privacy .pv-two .eyebrow { color: var(--ink); }
+.privacy .pv-two ul { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.privacy .pv-two li { position: relative; padding-left: 16px; overflow-wrap: anywhere; }
+.privacy .pv-two li::before { position: absolute; left: 0; top: 0; font: 500 12px/1.6 var(--font-mono); }
+.privacy .pv-goes li::before { content: "×"; color: var(--crit); }
+.privacy .pv-stays li::before { content: "✓"; color: var(--ok); }
+.privacy .pv-two b { font: 500 12.5px var(--font-mono); }
+.privacy .pv-ask form { display: flex; flex-direction: column; gap: 12px; }
+.privacy .pv-ask .input[aria-invalid="true"] { border-color: var(--crit); }
+.privacy .pv-ask .faint { font-size: 12.5px; }
+
+/* After removal */
+.privacy .pv-done { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 14px; }
+.privacy .pv-done-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.privacy .pv-done h3:focus { outline: none; }
+.privacy .pv-done .table-wrap { border: 1px solid var(--line); border-radius: var(--r-md); }
+.privacy .pv-done .table td, .privacy .pv-done .table th { white-space: nowrap; }
+.privacy .pv-log { margin: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.privacy .pv-log > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; }
+.privacy .pv-log dt { font: 400 11px/1.6 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.privacy .pv-log dd { margin: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 760px) {
+  .privacy .pv-two { grid-template-columns: minmax(0, 1fr); }
+  .privacy .pv-top { grid-template-columns: auto minmax(0, 1fr); }
+  .privacy .pv-state { grid-column: 2; grid-row: 3; }
+  .privacy .pv-state:empty { display: none; }
+  .privacy .pv-part { margin-left: 0; }
+  .privacy .pv-part li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .privacy .pv-part li > :nth-child(3) { grid-column: 1 / -1; grid-row: 2; }
+  .privacy .pv-part li > .tag { grid-column: 3; grid-row: 1; }
+  .privacy .pv-ask { margin-inline: 12px; padding: 14px; }
+  .privacy .pv-res-head .btn { flex: 1 1 auto; }
+}
