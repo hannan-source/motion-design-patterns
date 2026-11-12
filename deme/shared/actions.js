@@ -79,6 +79,8 @@ function findItem(ctx, ref) {
 
 // ───────── The scan gate, by kind of parcel ─────────
 // Each returns { direction, message } after saving the parcel with its new event and status.
+// What an online order is worth in rupees: stated when it came in, or worked out now from the newest rate.
+const rupeesOf = (ctx, order) => (order.currency && order.currency !== 'INR' ? order.amountInr ?? ctx.toInr(order.amount || 0, order.currency, order.date) ?? ctx.fail(`Order ${order.orderNo} is in ${order.currency} and there is no exchange rate for it yet. Add one under Finance, then scan again.`) : order.amount);
 function gateShopify(ctx, parcel, note, event) {
   const order = ctx.all('shop_orders').find((o) => o.orderNo === parcel.ref);
   if (parcel.status === 'packed') {
@@ -86,8 +88,8 @@ function gateShopify(ctx, parcel, note, event) {
     ctx.setStatus('parcels', parcel, 'in_transit');
     if (!order) return { direction: 'out', message: `Parcel ${parcel.barcode} is scanned out. No Shopify order ${parcel.ref} was found, so no sale was booked.` };
     ctx.setStatus('shop_orders', order, 'shipped');
-    const sale = ctx.voucher({ type: 'Sales', party: 'Shopify', dr: 'Shopify Clearing', cr: 'Online Sales', amount: order.amount, narration: `Shopify order ${order.orderNo}${order.customerName ? ` for ${order.customerName}` : ''}`, ref: order.orderNo });
-    return { direction: 'out', message: `Order ${order.orderNo} is on its way.${sale ? ` The sale of ${rupees(order.amount)} is booked.` : ''}` };
+    const sale = ctx.voucher({ type: 'Sales', party: 'Shopify', dr: 'Shopify Clearing', cr: 'Online Sales', amount: rupeesOf(ctx, order), narration: `Shopify order ${order.orderNo}${order.customerName ? ` for ${order.customerName}` : ''}`, ref: order.orderNo });
+    return { direction: 'out', message: `Order ${order.orderNo} is on its way.${sale ? ` The sale of ${rupees(rupeesOf(ctx, order))} is booked.` : ''}` };
   }
   if (parcel.status === 'at_factory') ctx.fail(`This parcel is already scanned in as a return. Look under Returns for order ${parcel.ref}.`);
   if (!['in_transit', 'delivered', 'returning'].includes(parcel.status)) ctx.fail('This parcel cannot be scanned at the gate right now. Check its trail in Parcels.');
@@ -626,6 +628,7 @@ export const ACTIONS = {
       // Going out: nothing leaves without the office's paperwork.
       if (parcel.status === 'packed') { const missing = papersMissing(parcel); if (missing) ctx.fail(missing); }
       const { direction, message } = gate(ctx, parcel, note, event, number(payload.workMinutes));
+      if (direction === 'out' && parcel.kind !== 'store') slipsDispatched(ctx, parcel.ref);
       return { message, data: { parcel: ctx.get('parcels', parcel.id), direction } };
     },
   },
@@ -729,5 +732,6 @@ export const ACTIONS = {
 // The go-live plan and the task board steps live in their own file.
 import { GOLIVE_ACTIONS } from './golive.js';
 import { FLOOR_ACTIONS, openClaim, papersMissing } from './floor.js';
+import { SLIP_ACTIONS, slipsDispatched } from './slips.js';
 import { COLLAB_ACTIONS } from './collab.js';
-Object.assign(ACTIONS, GOLIVE_ACTIONS, COLLAB_ACTIONS, FLOOR_ACTIONS);
+Object.assign(ACTIONS, GOLIVE_ACTIONS, COLLAB_ACTIONS, FLOOR_ACTIONS, SLIP_ACTIONS);

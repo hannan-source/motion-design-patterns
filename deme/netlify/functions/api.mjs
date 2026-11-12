@@ -19,14 +19,14 @@ function getApi() {
 export default async (request, context) => {
   const url = new URL(request.url);
   const headers = Object.fromEntries([...request.headers].map(([k, v]) => [k.toLowerCase(), v]));
-  let body = {};
+  let body = {}, raw = '';
   if (request.method !== 'GET' && request.method !== 'DELETE') {
-    const text = await request.text();
+    const text = await request.text(); raw = text;
     if (text.length > 6e6) return Response.json({ error: 'That is too large. Import in smaller files.' }, { status: 413 });
     try { body = text ? JSON.parse(text) : {}; } catch { return Response.json({ error: 'The request was not valid JSON.' }, { status: 400 }); }
   }
   let out;
-  try { out = await getApi().handle({ method: request.method, path: url.pathname, query: url.searchParams, headers, body, ip: context?.ip || headers['x-nf-client-connection-ip'] || '' }); }
+  try { out = await getApi().handle({ method: request.method, path: url.pathname, query: url.searchParams, headers, body, raw, ip: context?.ip || headers['x-nf-client-connection-ip'] || '' }); }
   catch (e) { console.error(e); return Response.json({ error: String(e.message || e) }, { status: 500 }); }
   const h = new Headers(out.headers);
   for (const c of out.cookies) h.append('set-cookie', c);

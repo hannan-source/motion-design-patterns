@@ -22,20 +22,22 @@ export function createApp({ dbFile = process.env.DEME_DB || join(root, 'data', '
   const readBody = (req) => new Promise((ok, bad) => {
     let size = 0; const chunks = [];
     req.on('data', (c) => { size += c.length; if (size > 6e6) { ok({ tooLarge: true }); req.destroy(); } else chunks.push(c); });
-    req.on('end', () => { if (!chunks.length) return ok({ json: {} }); try { ok({ json: JSON.parse(Buffer.concat(chunks).toString('utf8')) }); } catch { ok({ bad: true }); } });
+    req.on('end', () => { if (!chunks.length) return ok({ json: {}, raw: '' }); const raw = Buffer.concat(chunks).toString('utf8'); try { ok({ json: JSON.parse(raw), raw }); } catch { ok({ bad: true }); } });
     req.on('error', bad);
   });
+  // Scripts only from this site and no inline script, so text that reaches a page can never run as code.
+  const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
   const plain = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); res.end(JSON.stringify(body)); };
 
   async function apiRequest(req, res, url) {
-    let body = {};
+    let body = {}, raw = '';
     if (req.method !== 'GET' && req.method !== 'DELETE') {
       const b = await readBody(req);
       if (b.tooLarge) return plain(res, 413, { error: 'That is too large. Import in smaller files.' });
       if (b.bad) return plain(res, 400, { error: 'The request was not valid JSON.' });
-      body = b.json;
+      body = b.json; raw = b.raw;
     }
-    const out = await api.handle({ method: req.method, path: url.pathname, query: url.searchParams, headers: req.headers, body, ip: req.socket.remoteAddress });
+    const out = await api.handle({ method: req.method, path: url.pathname, query: url.searchParams, headers: req.headers, body, raw, ip: req.socket.remoteAddress });
     const headers = { ...out.headers };
     if (out.cookies.length) headers['set-cookie'] = out.cookies;
     res.writeHead(out.status, headers);
@@ -55,7 +57,7 @@ export function createApp({ dbFile = process.env.DEME_DB || join(root, 'data', '
       const s = await stat(file);
       if (!s.isFile()) throw new Error('not a file');
       const data = await readFile(file);
-      res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream', 'Cache-Control': file.includes(`${sep}vendor${sep}`) ? 'public, max-age=604800' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin' });
+      res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream', 'Cache-Control': file.includes(`${sep}vendor${sep}`) ? 'public, max-age=604800' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': CSP, 'Permissions-Policy': 'camera=(self), microphone=(), geolocation=(), payment=()', 'Referrer-Policy': 'same-origin' });
       res.end(data);
     } catch { plain(res, 404, { error: 'Not found' }); }
   }

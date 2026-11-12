@@ -10,6 +10,7 @@
 import { randomBytes, scrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { createService, UserError, newId } from '../shared/service.js';
+import { shopifyReady, pullShopifyOrders, shopifyWebhookOk, fromShopifyWebhook, metaReady, pullMetaSpend } from './connectors.js';
 import { ACTIONS } from '../shared/actions.js';
 import { vouchersToTallyXML } from '../shared/tally.js';
 import { COMPANY, PRODUCT, ROLES, ENTITIES, entityById, fieldsOf } from '../shared/schema.js';
@@ -140,7 +141,9 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
   async function aiMap(svcUserWritable, body) {
     if (!aiReady()) throw new UserError('AI mapping is not switched on. Match the columns by hand below.', 501);
     const headers = (Array.isArray(body.headers) ? body.headers : []).map((h) => String(h).slice(0, 80)).slice(0, 60);
-    const sample = (Array.isArray(body.sample) ? body.sample : []).slice(0, 5).map((row) => Object.fromEntries(Object.entries(row).slice(0, 60).map(([k, v]) => [String(k).slice(0, 80), String(v).slice(0, 120)])));
+    // Only the shape of the data is needed to match columns, so anything that looks like an email address or a phone number is blanked before it leaves.
+    const mask = (v) => String(v).slice(0, 120).replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, 'name@example.com').replace(/\+?\d[\d\s().-]{8,}\d/g, '0000000000');
+    const sample = (Array.isArray(body.sample) ? body.sample : []).slice(0, 5).map((row) => Object.fromEntries(Object.entries(row).slice(0, 60).map(([k, v]) => [String(k).slice(0, 80), mask(v)])));
     if (!headers.length) throw new UserError('The file has no column headings.');
     const candidates = (body.entity ? [entityById[body.entity]].filter(Boolean) : ENTITIES).filter((e) => svcUserWritable.includes(e.id));
     if (!candidates.length) throw new UserError('Your role cannot add records of that kind.', 403);
@@ -183,6 +186,29 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
       if (parts[0] === 'health') return json(200, { ok: true, company: COMPANY, product: PRODUCT });
       if (parts[0] === 'auth' && parts[1] === 'google' && m === 'GET') return parts[2] === 'callback' ? await googleCallback(req) : googleStart(req);
 
+      // Shopify tells us about a paid order the moment it happens. The message is trusted only if
+      // its signature matches; it then goes through the same intake as a pull, as the system itself.
+      if (parts[0] === 'shopify' && parts[1] === 'webhook' && m === 'POST') {
+        if (!shopifyWebhookOk(env, req.raw || '', req.headers['x-shopify-hmac-sha256'])) return json(401, { error: 'Not signed by Shopify.' });
+        const out = await store.run((db) => createService(db, { actions: ACTIONS, hash: hashPassword }).act({ id: 'shopify', name: 'Shopify', role: 'sales', service: true }, 'shopify.ingest', { payload: { orders: [fromShopifyWebhook(body)] } }));
+        return json(200, { ok: true, message: out.message });
+      }
+      // Pulls ask an outside service, so they run outside the store: who is asking, then fetch, then save.
+      if ((parts[0] === 'shopify' || parts[0] === 'media') && parts[1] === 'pull' && m === 'POST') {
+        const shop = parts[0] === 'shopify';
+        const who = await store.run((db) => { const svc = createService(db, { actions: ACTIONS, hash: hashPassword }); const u = whoIs(db, svc, req); if (!u) throw new UserError('Sign in to continue.', 401); if (!svc.can(u, shop ? 'b2c' : 'marketing', 'write')) throw new UserError('Your role cannot do this.', 403); const last = shop ? db.all('shop_orders').map((o) => o.date).sort().pop() : db.all('media_days').filter((r) => r.channel === 'Meta').map((r) => r.date).sort().pop(); return { u, last }; });
+        if (shop ? !shopifyReady(env) : !metaReady(env)) throw new UserError(`${shop ? 'Shopify' : 'Meta'} is not connected yet. Add its keys in the site settings.`, 501);
+        const day = (d) => d.toISOString().slice(0, 10), back = (n) => day(new Date(Date.now() - n * 864e5));
+        const ok = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? v : null);
+        // By default: a few days before the newest thing we already hold, so nothing is missed.
+        const since = ok(body.since) || (who.last ? day(new Date(Date.parse(who.last) - 3 * 864e5)) : back(shop ? 14 : 30));
+        let rows;
+        try { rows = shop ? await pullShopifyOrders({ env, fetchImpl, since }) : await pullMetaSpend({ env, fetchImpl, since, until: ok(body.until) || day(new Date()) }); }
+        catch (e) { console.error(e); throw new UserError(String(e.message || e), 502); }
+        const out = await store.run((db) => createService(db, { actions: ACTIONS, hash: hashPassword }).act(who.u, shop ? 'shopify.ingest' : 'media.ingest', { payload: shop ? { orders: rows } : { rows, from: 'Meta' } }));
+        return json(200, { ...out, since });
+      }
+
       // The AI call goes to an outside service, so it runs outside the store: first find out who is asking.
       if (parts[0] === 'ai' && parts[1] === 'map' && m === 'POST') {
         const writable = await store.run((db) => { const svc = createService(db, { actions: ACTIONS, hash: hashPassword }); const u = whoIs(db, svc, req); if (!u) throw new UserError('Sign in to continue.', 401); return svc.writable(u); });
@@ -199,7 +225,7 @@ export function createApi({ store, env = process.env, fetchImpl = fetch, anthrop
       const res = await store.run(async (db) => {
         const svc = createService(db, { actions: ACTIONS, hash: hashPassword });
         const out = await (async () => {
-        if (parts[0] === 'state') return json(200, { setupNeeded: !svc.hasUsers(), user: svc.publicUser(whoIs(db, svc, req)), google: !!google(), ai: aiReady(), mail: mailReady(), product: PRODUCT });
+        if (parts[0] === 'state') return json(200, { setupNeeded: !svc.hasUsers(), user: svc.publicUser(whoIs(db, svc, req)), google: !!google(), ai: aiReady(), mail: mailReady(), shopify: shopifyReady(env), meta: metaReady(env), product: PRODUCT });
         if (parts[0] === 'setup' && m === 'POST') { const user = await svc.setup(body); return startSession(db, req, json(200, { user }), user); }
         if (parts[0] === 'login' && m === 'POST') {
           const key = `${req.ip}|${String(body.email || '').toLowerCase()}`, a = attempts.get(key);

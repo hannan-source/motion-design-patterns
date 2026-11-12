@@ -103,11 +103,20 @@ export function createService(db, { actions = {}, hash = null } = {}) {
   const need = (ok, msg = 'You do not have access to this.') => { if (!ok) fail(msg, 403); };
   const ent = (id) => entityById[id] || fail(`Unknown record type: ${id}`, 404);
 
+  // Some fields are not for everyone who can open the record: `secret` ones are for module admins,
+  // `only` ones for people who hold a level on one of the named modules, written 'module' (read) or
+  // 'module:write' (who cut it and who stitched it are for those who run the floor).
   const strip = (user, e, doc) => {
     if (can(user, e.module, 'admin')) return doc;
-    const secret = fieldsOf(e).filter((f) => f.secret);
-    if (!secret.length) return doc;
-    const out = { ...doc }; for (const f of secret) delete out[f.k]; return out;
+    const hidden = fieldsOf(e).filter((f) => f.secret || (f.only && !f.only.some((m) => can(user, m.split(':')[0], m.split(':')[1] || 'read'))));
+    if (!hidden.length) return doc;
+    const out = { ...doc }; for (const f of hidden) delete out[f.k]; return out;
+  };
+  /** An amount stated in rupees, at the newest rate on or before the date. Null when no rate is on record. */
+  const toInr = (amount, currency, date = todayIso()) => {
+    if (!currency || currency === 'INR') return amount;
+    const rate = db.all('fx_rates').filter((r) => r.currency === currency && r.date <= date).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    return rate ? Math.round(amount * rate.rate * 100) / 100 : null;
   };
 
   // ── Validation ──
@@ -183,7 +192,9 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       /** May the person doing this change that record? */
       may: (entityId, doc) => mayChange(user, ent(entityId), doc),
       why: (entityId) => RULES[entityId]?.why || 'Your role cannot change this.',
-      handOver, seedOrg, centreByKey,
+      handOver, seedOrg, centreByKey, toInr,
+      /** Does the person doing this hold that level on the module? */
+      can: (module, level = 'read') => can(user, module, level),
     };
     return ctx;
   }
@@ -417,7 +428,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       let e = null, btn = null, doc = null;
       if (entityId) {
         e = ent(entityId); btn = (e.actions || []).find((a) => a.id === actionId) || fail('That action does not apply here.', 404);
-        need(can(user, btn.module || e.module, btn.level || 'write') || (!btn.module && (e.alsoWrite || []).some((m) => can(user, m, btn.level || 'write'))), 'Your role cannot do this.');
+        need([].concat(btn.module || e.module).some((m) => can(user, m, btn.level || 'write')) || (!btn.module && (e.alsoWrite || []).some((m) => can(user, m, btn.level || 'write'))), 'Your role cannot do this.');
       } else {
         need(def.level === 'self' || [].concat(def.module).some((m) => can(user, m, def.level || 'write')), 'Your role cannot do this.');
       }

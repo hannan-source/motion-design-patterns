@@ -14,7 +14,12 @@ export const INSPECTION_PASS_MARK = 40;
 // Why fabric is turned down, wherever it is caught: at the store, at the dye house, or after dyeing.
 export const FABRIC_REASONS = [['shade', 'Shade mismatch'], ['weave', 'Weave defect'], ['yarn', 'Yarn lines'], ['pilling', 'Pilling'], ['shrink', 'Shrinkage'], ['short', 'Short length'], ['dirt', 'Contamination'], ['damage', 'Damage'], ['patchy', 'Patchy dyeing'], ['other', 'Other']];
 // Above this invoice value a parcel cannot leave without an e-way bill number.
-export const EWAY_ABOVE = 50000; // 4-point system: penalty points per 100 sq yd
+export const EWAY_ABOVE = 50000;
+// Why a garment is sent back or turned down at QC.
+export const GARMENT_REASONS = [['stitching', 'Stitching'], ['measurement', 'Measurement'], ['fabric', 'Fabric defect'], ['finishing', 'Finishing'], ['stain', 'Stain'], ['accessory', 'Accessory']];
+export const CURRENCIES = ['INR', 'USD', 'GBP', 'EUR', 'AED', 'AUD'];
+// The stops a made-to-order piece makes, in order. Each one is stamped with the time and the person.
+export const SLIP_STAGES = [['new', 'New'], ['assigned', 'With the master'], ['cut', 'Cut'], ['stitching', 'Being stitched'], ['stitched', 'Stitched'], ['qc', 'At QC'], ['passed', 'Passed QC'], ['finished', 'Finished'], ['packed', 'Packed'], ['dispatched', 'Dispatched']]; // 4-point system: penalty points per 100 sq yd
 
 // ───────── Roles ─────────
 // Levels, lowest to highest. `scan` is the floor tier: scan bundles in and out, nothing else.
@@ -242,10 +247,10 @@ export const ENTITIES = [
 
   // ── B2C ──
   { id: 'shop_orders', module: 'b2c', name: 'Shopify orders', one: 'Shopify order', title: 'orderNo',
-    info: 'Online orders. Import the Shopify orders export as a CSV, or add one by hand. Shipping is recorded at the scan gate in Logistics, which also books the sale.',
+    info: 'Online orders. With the Shopify connection on, Pull from Shopify brings in new paid orders and makes a slip for each piece. Otherwise import the Shopify orders export as a CSV, or add one by hand. The customer is kept by name and country only; contact details stay in Shopify. Shipping is recorded at the scan gate in Logistics, which also books the sale.',
     statuses: S(['new', 'New', 'warn'], ['in_production', 'In production', 'info'], ['packed', 'Packed', 'info'], ['shipped', 'Shipped', 'ok'], ['delivered', 'Delivered', 'ok'], ['returned', 'Returned', 'crit'], ['cancelled', 'Cancelled', 'crit']), initial: 'new',
     fields: [['orderNo', 'Order no.', 'text', { req: true, list: true }], ['date', 'Date', 'date', { def: 'today', list: true }], ['customerName', 'Customer', 'text', { list: true }], ['country', 'Ships to', 'text', { list: true }],
-      ['style', 'Style', 'ref', { ref: 'styles', req: true, list: true }], ['size', 'Size', 'text', {}], ['qty', 'Pieces', 'number', { def: 1 }], ['amount', 'Amount', 'money', { list: true }], ['awb', 'Tracking no.', 'text', {}]],
+      ['style', 'Style', 'ref', { ref: 'styles', list: true }], ['size', 'Size', 'text', {}], ['qty', 'Pieces', 'number', { def: 1 }], ['currency', 'Currency', 'select', { def: 'INR', options: opt(...CURRENCIES) }], ['amountInr', 'In rupees', 'money', { ro: true }], ['channel', 'Came from', 'text', { ro: true, list: true }], ['campaign', 'Campaign', 'text', { ro: true }], ['items', 'Items', 'text', { ro: true }], ['amount', 'Amount', 'money', { list: true }], ['awb', 'Tracking no.', 'text', {}]],
     actions: [{ id: 'shop.pack', label: 'Pack and create parcel', when: ['new', 'in_production'], form: [['awb', 'Tracking barcode on the label', 'text', { req: true }], ['carrier', 'Carrier', 'ref', { ref: 'suppliers' }]] }, { id: 'shop.cancel', label: 'Cancel', when: ['new', 'in_production'] }] },
   { id: 'store_orders', module: 'b2c', name: 'Store orders', one: 'Store order', no: 'ST', title: 'no',
     info: 'Orders and alterations from Deme\'s own store. Each time a piece comes back for fit, it is scanned in at the gate and the visit is counted on the order.',
@@ -336,6 +341,29 @@ export const ENTITIES = [
     info: 'What people have said on a task, oldest first. Mention someone with @ and their name to tell them.',
     fields: [['task', 'Task', 'ref', { ref: 'tasks', req: true, list: true }], ['text', 'Comment', 'long', { req: true, list: true }], ['by', 'By', 'user', { ro: true, list: true }]] },
 
+  // ── Orders, piece by piece ──
+  { id: 'slips', module: 'production', name: 'Order slips', one: 'Slip', no: 'SL', title: 'no', open: true, readonly: true,
+    info: 'One slip per made-to-order piece: an online order line, or a piece asked for by the store, a boutique, a shoot or an influencer. The slip carries the QR code that is scanned at each stop, so the time and the person are recorded without typing. Everyone can see where a slip is and whether it is stuck for want of fabric. Which master and tailor are on it, and the trail of who did what, are shown only to those who run the floor and to QC.',
+    statuses: S(...SLIP_STAGES.map(([id, name]) => [id, name, id === 'new' ? 'warn' : id === 'dispatched' || id === 'passed' || id === 'finished' ? 'ok' : 'info']), ['rework', 'Back for rework', 'warn'], ['rejected', 'Rejected at QC', 'crit'], ['cancelled', 'Cancelled', 'crit']), initial: 'new',
+    fields: [['source', 'From', 'select', { list: true, options: opt(['shopify', 'Shopify'], ['internal', 'Internal order'], ['store', 'Store']) }], ['kind', 'For', 'select', { list: true, options: opt(['customer', 'Customer order'], ['store', 'Store display'], ['boutique', 'Boutique stock'], ['shoot', 'Shoot'], ['influencer', 'Influencer']) }],
+      ['orderNo', 'Order', 'text', { list: true }], ['shopOrder', 'Shopify order', 'ref', { ref: 'shop_orders' }], ['customerName', 'Customer', 'text', { only: ['production:write', 'b2c:write'], personal: true }],
+      ['style', 'Style', 'ref', { ref: 'styles', list: true }], ['styleName', 'Ordered as', 'text', {}], ['size', 'Size', 'text', { list: true }], ['colour', 'Fabric and colour', 'text', {}], ['measurements', 'Measurements and notes', 'long', { personal: true }],
+      ['priority', 'Priority', 'select', { def: 'medium', list: true, options: opt(['high', 'High'], ['medium', 'Medium'], ['low', 'Low']) }], ['priorityReason', 'Why high', 'text', {}], ['promised', 'Promised', 'date', { list: true }],
+      ['raisedBy', 'Asked by', 'user', { list: true }], ['team', 'Team', 'ref', { ref: 'work_centres' }], ['purpose', 'Purpose', 'text', {}],
+      ['master', 'Master', 'text', { only: ['production:write'] }], ['tailor', 'Tailor', 'user', { only: ['production:write'] }],
+      ['noFabric', 'Missing fabric', 'bool', { list: true }], ['stuck', 'What is missing', 'text', {}], ['needsInfo', 'Needs measurements', 'bool', {}], ['reworks', 'Times reworked', 'number', {}], ['qcReason', 'QC reason', 'select', { options: GARMENT_REASONS }],
+      ['events', 'Trail', 'lines', { only: ['production:write', 'quality:write'], cols: [['at', 'When', 'datetime', {}], ['stage', 'Stop', 'text', {}], ['by', 'By', 'text', {}], ['note', 'Note', 'text', {}]] }]],
+    actions: [{ id: 'slip.assign', label: 'Give to a master', when: ['new', 'assigned'], form: [['master', 'Master', 'text', { req: true }]] }, { id: 'slip.cut', label: 'Cut', when: ['assigned'] },
+      { id: 'slip.noFabric', label: 'Mark missing fabric', when: ['new', 'assigned'], module: ['production', 'inventory'], form: [['stuck', 'What is missing', 'text', { req: true }]] }, { id: 'slip.fabricIn', label: 'Fabric has arrived', when: ['new', 'assigned'], module: ['production', 'inventory'] },
+      { id: 'slip.finish', label: 'Finished', when: ['passed'] }, { id: 'slip.pack', label: 'Packed', when: ['finished'], module: ['production', 'logistics', 'b2c'] },
+      { id: 'slip.details', label: 'Add measurements', when: ['new', 'assigned'], module: ['production', 'b2c'], form: [['size', 'Size', 'text', {}], ['measurements', 'Measurements and notes', 'long', { req: true }]] },
+      { id: 'slip.cancel', label: 'Cancel', when: ['new', 'assigned', 'cut'], level: 'admin', form: [['note', 'Why', 'text', { req: true }]] }] },
+
+  // ── Money in other currencies ──
+  { id: 'fx_rates', module: 'finance', name: 'Exchange rates', one: 'Exchange rate', title: 'currency',
+    info: 'Rupees for one unit of each currency Deme sells in. The newest rate on or before a document\'s date is used to state online orders, ad spend and wholesale invoices in rupees. Add a rate when it moves enough to matter; an invoice can still carry its own rate.',
+    fields: [['currency', 'Currency', 'select', { req: true, list: true, options: opt(...CURRENCIES.filter((c) => c !== 'INR')) }], ['rate', 'Rupees per unit', 'number', { req: true, list: true }], ['date', 'From', 'date', { def: 'today', req: true, list: true }]] },
+
   // ── Marketing ──
   { id: 'campaigns', module: 'marketing', name: 'Campaigns', one: 'Campaign', title: 'name',
     statuses: S(['planned', 'Planned'], ['live', 'Live', 'info'], ['ended', 'Ended', 'ok']), initial: 'planned',
@@ -347,6 +375,12 @@ export const ENTITIES = [
     fields: [['title', 'Title', 'text', { req: true, list: true }], ['type', 'Type', 'select', { list: true, options: opt('Reel', 'Post', 'Story', 'Email', 'Ad creative', 'Website', 'Shoot') }], ['channel', 'Channel', 'select', { list: true, options: opt('Instagram', 'Meta Ads', 'Google Ads', 'Email', 'Website', 'Other') }],
       ['publishDate', 'Publish date', 'date', { list: true }], ['owner', 'Owner', 'user', { list: true }], ['campaign', 'Campaign', 'ref', { ref: 'campaigns' }], ['notes', 'Notes', 'long', {}]],
     actions: [{ id: 'content.next', label: 'Move forward', when: ['idea', 'in_work', 'scheduled'] }] },
+
+  { id: 'media_days', module: 'marketing', name: 'Channel spend by day', one: 'Day of spend', title: 'campaign',
+    info: 'One line per day, channel and campaign: what was spent and what the channel says it brought in. Meta is pulled in when its connection is on; any channel can be imported from its export, or pushed in by a scheduled job with a service key. Set against online orders by the channel they came from, it shows what each channel really returns.',
+    fields: [['date', 'Date', 'date', { req: true, list: true }], ['channel', 'Channel', 'select', { req: true, list: true, options: opt('Meta', 'Google', 'Email', 'Influencer', 'Affiliate', 'Other') }], ['campaign', 'Campaign', 'text', { list: true }],
+      ['spend', 'Spend', 'money', { list: true }], ['currency', 'Currency', 'select', { def: 'INR', options: opt(...CURRENCIES) }], ['spendInr', 'Spend in rupees', 'money', { ro: true }],
+      ['impressions', 'Impressions', 'number', {}], ['clicks', 'Clicks', 'number', { list: true }], ['purchases', 'Purchases the channel claims', 'number', { list: true }], ['revenue', 'Revenue the channel claims', 'money', {}], ['from', 'Brought in by', 'text', { ro: true }]] },
 
   // ── Design ──
   { id: 'collections', module: 'design', name: 'Collections', one: 'Collection', title: 'name',

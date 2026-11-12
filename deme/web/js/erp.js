@@ -112,7 +112,7 @@ export function mount(el, ctx) {
   // ───────── Record drawer ─────────
   function allowedActions(e, doc) {
     const lvl = (m) => LEVELS.indexOf(levelOf(data.user, m));
-    const ok = (a) => lvl(a.module || e.module) >= LEVELS.indexOf(a.level || 'write') || (!a.module && (e.alsoWrite || []).some((m) => lvl(m) >= LEVELS.indexOf(a.level || 'write')));
+    const ok = (a) => [].concat(a.module || e.module).some((m) => lvl(m) >= LEVELS.indexOf(a.level || 'write')) || (!a.module && (e.alsoWrite || []).some((m) => lvl(m) >= LEVELS.indexOf(a.level || 'write')));
     return [...(e.actions || []).filter((a) => !a.when || a.when.includes(doc.status)), ...(EXTRA[e.id] || [])].filter(ok);
   }
   function recordHtml(e, doc) {
