@@ -14,6 +14,23 @@ export const oops = (e) => toast(e?.message || 'Something went wrong.', 'crit');
 
 /** The "i" button. Clicking it shows `text`; nothing is explained on screen otherwise. */
 export const info = (text, title = '') => (text ? `<button type="button" class="info" aria-label="About ${esc(title || 'this')}" aria-expanded="false" data-info="${esc(text)}" data-info-title="${esc(title)}">i</button>` : '');
+/**
+ * The light under the cursor: tells the card the pointer is over where it is, so the card's
+ * gradient shows through there. One listener for the whole app, at most one write a frame.
+ */
+export function wireDepth() {
+  if (!matchMedia('(hover: hover)').matches) return;
+  let lit = null, raf = 0, ev = null;
+  const paint = () => {
+    raf = 0; if (!ev) return;
+    const card = ev.target instanceof Element ? ev.target.closest('.panel, .kpi, .lit') : null;
+    if (lit && lit !== card) { lit.style.removeProperty('--mx'); lit.style.removeProperty('--my'); }
+    lit = card;
+    if (card) { const r = card.getBoundingClientRect(); card.style.setProperty('--mx', `${Math.round(ev.clientX - r.left)}px`); card.style.setProperty('--my', `${Math.round(ev.clientY - r.top)}px`); }
+  };
+  document.addEventListener('pointermove', (e) => { ev = e; if (!raf) raf = requestAnimationFrame(paint); }, { passive: true });
+}
+
 export function wireInfo() {
   const pop = document.getElementById('pop');
   let owner = null;
