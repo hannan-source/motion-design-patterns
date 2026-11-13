@@ -36,7 +36,7 @@ const dayOf = (isoDate) => new Date(`${isoDate}T00:00:00`);
 const share = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const can = (entity) => data.canRead(entity);
 const rows = (entity) => (can(entity) ? data.all(entity) : []);
-const canOpen = (entity) => data.can(data.entity(entity).module, 'read');
+const canOpen = (entity) => !!data.entity(entity) && data.can(data.entity(entity).module, 'read');
 const canGate = () => data.can('logistics', 'write') || data.can('b2c', 'write') || data.can('production', 'write');
 const fnName = (id) => (FN_NAME[id] || id || 'No owner').replace(/\s*\(.*\)$/, '');
 const fnShort = (id) => FN_SHORT[id] || fnName(id).split(',')[0];

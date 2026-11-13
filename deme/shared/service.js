@@ -8,6 +8,7 @@
 import { entityById, fieldsOf, can as roleCan, levelOf as roleLevel, LEVELS, ROLES, STARTER_LEDGERS } from './schema.js';
 import { schemaFor } from './platform.js';
 import { positionById, DEFAULT_CENTRES, headOf, isHead, isMine } from './org.js';
+import { PACK_RULES } from './packs.js';
 
 let ALL = null;   // every built-in list, for code that runs outside a workspace (tests, the preview)
 
@@ -78,6 +79,8 @@ export function createService(db, { actions = {}, hash = null, schema = null, ce
     },
     comments: { read: (u, d) => { const t = db.get('tasks', d.task); return !t || RULES.tasks.read(u, t); } },
   };
+  // Packs bring their own rules for their own lists.
+  for (const make of PACK_RULES) Object.assign(RULES, make({ db, can, centres, isHead, headOf, isAdmin }));
   const visible = (user, e, doc) => !RULES[e.id]?.read || RULES[e.id].read(user, doc);
   /** May this person change this record? The head of a work centre also runs its own workstations. */
   const mayChange = (user, e, doc) => {
@@ -186,7 +189,9 @@ export function createService(db, { actions = {}, hash = null, schema = null, ce
       const fresh = !doc.id;
       if (fresh) { doc.id = newId(); doc.createdAt = now; doc.createdBy = user.id; if (e.no && !doc.no) doc.no = `${e.no}-${String(db.next(e.id)).padStart(5, '0')}`; if (e.statuses && !doc.status) doc.status = e.initial || Object.keys(e.statuses)[0]; }
       doc.updatedAt = now; doc.updatedBy = user.id;
+      const before = fresh || !touched.changes ? null : db.get(entityId, doc.id);
       db.put(entityId, doc); touched.add(entityId);
+      touched.changes?.push({ entity: entityId, id: doc.id, before, after: doc });
       return doc;
     };
     const log = (entityId, id, action, text) => db.log({ at: now, user: user.id, userName: user.name, entity: entityId, id, action, text });
@@ -214,9 +219,15 @@ export function createService(db, { actions = {}, hash = null, schema = null, ce
       /** Does the person doing this hold that level on the module? */
       can: (module, level = 'read') => can(user, module, level),
     };
+    touched.ctx = ctx;
     return ctx;
   }
-  const run = (fn) => { const touched = new Set(); const out = db.tx(() => fn(touched)); return { ...out, touched: [...touched] }; };
+  // Every request's writes are gathered and handed once to the workflows, inside the same transaction. What the workflows write is not fed back in, so a flow cannot set itself off.
+  const run = (fn) => {
+    const touched = new Set(); touched.changes = actions['hook.changes'] ? [] : null;
+    const out = db.tx(() => { const o = fn(touched); if (touched.ctx && touched.changes?.length) { const changes = touched.changes; touched.changes = null; actions['hook.changes'].run(touched.ctx, changes); } return o; });
+    return { ...out, touched: [...touched] };
+  };
 
   const svc = {
     // ── Session and people ──

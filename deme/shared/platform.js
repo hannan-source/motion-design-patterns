@@ -6,8 +6,11 @@
 // customer runs on; a food maker or a service firm picks another and gets a different system
 // from the same code.
 
-import { ENTITIES as BASE_ENTITIES, MODULES as BASE_MODULES } from './schema.js';
+import { ENTITIES, MODULES, entityById } from './schema.js';
 import { DEFAULT_CENTRES } from './org.js';
+
+// The built-in lists and areas as they were written. Copied once, so they stay whole whatever a browser does to the shared ones.
+const BASE_ENTITIES = Object.freeze([...ENTITIES]), BASE_MODULES = Object.freeze({ ...MODULES });
 
 export const PLATFORM = 'Hyper Lychee Labs ERP';
 export const PLATFORM_SHORT = 'Lychee';
@@ -32,7 +35,7 @@ export const TEMPLATES = [
   },
   {
     id: 'food', name: 'Food and packaged goods', line: 'Ingredients in, batches made, packed goods out: chocolate, snack bars, bakery.',
-    modules: [...CORE, 'purchasing', 'inventory', 'b2b', 'logistics', 'marketing'], packs: [],
+    modules: [...CORE, 'crm', 'purchasing', 'inventory', 'b2b', 'logistics', 'marketing'], packs: [],
     terms: { styles: ['Products', 'Product'], items: ['Ingredients and packaging', 'Material'] },
     centres: [
       ['management', 'Management', 'Direction, approvals and the system itself.', []],
@@ -44,7 +47,7 @@ export const TEMPLATES = [
   },
   {
     id: 'general', name: 'Any other business', line: 'People, work centres, projects and your own lists. Add what the business needs as it goes.',
-    modules: [...CORE, 'b2b', 'marketing'], packs: [],
+    modules: [...CORE, 'crm', 'b2b', 'marketing'], packs: [],
     terms: { styles: ['Products and services', 'Product or service'], items: ['Materials', 'Material'] },
     centres: [
       ['management', 'Management', 'Direction, approvals and the system itself.', []],
@@ -138,4 +141,17 @@ export function scopeDb(db, ws) {
     log: (e) => db.log({ ...e, ws }), logs: (f = {}) => db.logs({ ...f, ws }), logsAfter: (seq, limit) => db.logsAfter(seq, limit, ws),
     tx: (fn) => db.tx(fn),
   };
+}
+
+/**
+ * Browser only. Make the lists and areas every screen imports those of the signed-in workspace:
+ * what its template switched on, in its words, plus the lists it set up itself. A browser holds
+ * one workspace at a time, so the shared objects are changed in place. The server never calls this.
+ */
+export function applySchema(S) {
+  ENTITIES.length = 0; ENTITIES.push(...S.ENTITIES);
+  for (const k of Object.keys(entityById)) delete entityById[k];
+  Object.assign(entityById, S.byId);
+  for (const k of Object.keys(MODULES)) delete MODULES[k];
+  Object.assign(MODULES, S.MODULES);
 }

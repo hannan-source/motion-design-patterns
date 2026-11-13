@@ -4,7 +4,9 @@
 // Runs unchanged in Node and in the browser.
 
 import { TRACKS } from './golive.js';
+import { S, opt } from './defs.js';
 import { FUNCTIONS, POSITIONS } from './org.js';
+import { PACK_ENTITIES } from './packs.js';
 
 export const COMPANY = 'Deme';
 export const PRODUCT = 'Deme Intelligence';
@@ -34,7 +36,8 @@ export const MODULES = {
   b2b: { name: 'B2B sales', info: 'Wholesale customers, their purchase orders and invoices. Confirming a sales order raises the work orders for it. Posting an invoice writes the sales voucher and opens the receivable.' },
   b2c: { name: 'B2C sales', info: 'Shopify orders, store orders, fit visits and returns. Import Shopify orders from a CSV export until the connector is live. The sales of the day view reads from here.' },
   logistics: { name: 'Logistics', info: 'Every parcel in or out passes one scan gate. Scans update the order and the stock. Courier invoices are matched line by line against the parcels actually shipped before they are approved for payment.' },
-  finance: { name: 'Finance', info: 'Ledgers, vouchers, supplier bills and receivables. Most vouchers are written by events elsewhere in the ERP; manual journals can be added here. Vouchers export to Tally as import XML.' },
+  finance: { name: 'Accounts bridge', info: 'The hand-over to the accounting tool. The books are not kept here: events elsewhere write vouchers, bills and receivables in the business\'s own terms, and they export to Tally as import XML. Tax returns and the ledgers of record stay in the accounting tool.' },
+  crm: { name: 'Customers', info: 'Contacts and the deals in progress with them, from first conversation to won or lost. A won deal is the cue to raise the order.' },
   hr: { name: 'People', info: 'Employee records, attendance, leave, KRAs and payroll. Everyone can check in and out, apply for leave and see their own KRAs from My day. Salaries and payroll are visible to HR admins only.' },
   projects: { name: 'Projects', info: 'Shared projects and tasks for every team. Anyone can add a task, ask another work centre for something, comment, and say what a task is waiting on. The go-live plan lives here; so does every project after it.' },
   marketing: { name: 'Marketing', info: 'Campaigns with budget, spend and revenue, and the content calendar across channels.' },
@@ -48,7 +51,7 @@ export const ROLES = {
   admin: { name: 'System admin', perms: ALL('admin') },
   founder: { name: 'Founder / CEO', perms: ALL('admin') },
   ops_head: { name: 'Operations head', perms: ALL('admin') },
-  production_head: { name: 'Production head', perms: { production: 'admin', b2c: 'write', projects: 'write', purchasing: 'write', masters: 'write', inventory: 'read', quality: 'read', b2b: 'read', logistics: 'read', design: 'read' } },
+  production_head: { name: 'Production head', perms: { production: 'admin', b2c: 'write', projects: 'write', purchasing: 'write', masters: 'write', inventory: 'read', quality: 'read', b2b: 'read', logistics: 'read', design: 'read', crm: 'read' } },
   production_manager: { name: 'Production manager', perms: { production: 'write', b2c: 'write', projects: 'write', purchasing: 'write', masters: 'read', inventory: 'read', quality: 'read', b2b: 'read', design: 'read' } },
   line_manager: { name: 'Line manager', perms: { production: 'write', projects: 'write', purchasing: 'write', masters: 'read', inventory: 'read' } },
   operator: { name: 'Tailor / Master (scan only)', perms: { production: 'scan' } },
@@ -56,10 +59,10 @@ export const ROLES = {
   stores: { name: 'Stores', perms: { inventory: 'write', purchasing: 'write', quality: 'write', projects: 'write', production: 'read', logistics: 'read', masters: 'read' } },
   dispatch: { name: 'Dispatch', perms: { logistics: 'write', b2c: 'write', projects: 'write', inventory: 'read', production: 'read', masters: 'read' } },
   logistics: { name: 'Logistics', perms: { logistics: 'write', projects: 'write', purchasing: 'write', b2c: 'read', b2b: 'read', masters: 'read' } },
-  b2b: { name: 'B2B and merchandising', perms: { b2b: 'write', inventory: 'write', purchasing: 'write', projects: 'write', production: 'read', masters: 'write', design: 'read', logistics: 'read' } },
-  sales: { name: 'Sales (B2C)', perms: { b2c: 'write', production: 'read', projects: 'write', purchasing: 'write', logistics: 'read', masters: 'read' } },
-  finance: { name: 'Finance', perms: { finance: 'write', projects: 'write', purchasing: 'write', b2b: 'read', b2c: 'read', inventory: 'read', logistics: 'read', masters: 'read' } },
-  marketing: { name: 'Marketing', perms: { marketing: 'write', projects: 'write', b2c: 'read' } },
+  b2b: { name: 'B2B and merchandising', perms: { b2b: 'write', crm: 'write', inventory: 'write', purchasing: 'write', projects: 'write', production: 'read', masters: 'write', design: 'read', logistics: 'read' } },
+  sales: { name: 'Sales (B2C)', perms: { b2c: 'write', crm: 'write', production: 'read', projects: 'write', purchasing: 'write', logistics: 'read', masters: 'read' } },
+  finance: { name: 'Finance', perms: { finance: 'write', projects: 'write', purchasing: 'write', b2b: 'read', b2c: 'read', crm: 'read', inventory: 'read', logistics: 'read', masters: 'read' } },
+  marketing: { name: 'Marketing', perms: { marketing: 'write', crm: 'write', projects: 'write', b2c: 'read' } },
   design: { name: 'Design', perms: { design: 'write', projects: 'write', purchasing: 'write', masters: 'read', production: 'read' } },
   hr_admin: { name: 'HR admin', perms: { hr: 'admin', projects: 'write' } },
   // `outside`: not a member of the company. Sees only what its own screen hands it.
@@ -82,8 +85,6 @@ export const can = (user, module, level = 'read') => LEVELS.indexOf(levelOf(user
 // Field: [key, label, type, options]. Types: text, long, number, money, date, datetime, bool,
 // select (opts.options), ref (opts.ref = entity id), refs (many), user, lines (opts.cols), status.
 // opts: req, list (show in table), ro (set by the system, not typed), secret (admin level only), def (default), hint.
-const S = (...pairs) => Object.fromEntries(pairs.map(([id, name, tone = 'plain']) => [id, { name, tone }]));
-const opt = (...v) => v.map((x) => (Array.isArray(x) ? x : [x, x]));
 
 export const ENTITIES = [
   // ── Masters ──
@@ -394,6 +395,8 @@ export const ENTITIES = [
     statuses: S(['sketch', 'Sketch'], ['pattern', 'Pattern', 'info'], ['sample', 'Sample', 'info'], ['fit', 'Fit', 'warn'], ['approved', 'Approved', 'ok'], ['dropped', 'Dropped', 'crit']), initial: 'sketch',
     fields: [['collection', 'Collection', 'ref', { ref: 'collections', req: true, list: true }], ['name', 'Working name', 'text', { req: true, list: true }], ['owner', 'Designer', 'user', { list: true }], ['fabric', 'Fabric', 'ref', { ref: 'items' }], ['notes', 'Notes', 'long', {}]],
     actions: [{ id: 'dev.next', label: 'Move forward', when: ['sketch', 'pattern', 'sample', 'fit'] }, { id: 'dev.drop', label: 'Drop', when: ['sketch', 'pattern', 'sample', 'fit'] }] },
+  // ── Packs: chat, people and pay, customers, workflows ──
+  ...PACK_ENTITIES,
 ];
 
 export { FUNCTIONS, POSITIONS };
