@@ -5,10 +5,14 @@ import assert from 'node:assert/strict';
 import { createHmac, createHash } from 'node:crypto';
 import { createService, memoryDb } from '../shared/service.js';
 import { ACTIONS } from '../shared/actions.js';
+import { settingsFrom, scopeDb } from '../shared/platform.js';
 import { createApi } from '../server/app.js';
 import { fromShopifyWebhook } from '../server/connectors.js';
 
-const db = memoryDb();
+// One business on the platform: `root` is the whole database, `db` is this business's view of it.
+const root = memoryDb(), WS = 'w00000000001';
+root.put('workspaces', { id: WS, settings: settingsFrom('apparel', 'Test Business'), secrets: {}, status: 'on', createdAt: new Date().toISOString() });
+const db = scopeDb(root, WS);
 const svc = createService(db, { actions: ACTIONS, hash: async (p) => `h:${p}` });
 const admin = svc.getUser((await svc.setup({ name: 'Admin', email: 'admin@deme.test', password: 'correct-horse' })).id);
 const person = async (name, position) => svc.getUser((await svc.createUser(admin, { name, email: `${name.toLowerCase()}@deme.test`, password: 'correct-horse', position })).id);
@@ -137,8 +141,8 @@ test('Shopify and Meta through the API: a pull, and a webhook that must be signe
     throw new Error(`unexpected ${url}`);
   };
   const env = { SHOPIFY_STORE: 'deme-test.myshopify.com', SHOPIFY_TOKEN: 'shpat_x', SHOPIFY_WEBHOOK_SECRET: 'whsec', META_AD_ACCOUNT: 'act_123', META_TOKEN: 'meta-token' };
-  const api = createApi({ store: { run: async (fn) => fn(db) }, env, fetchImpl });
-  db.put('sessions', { id: createHash('sha256').update('tok').digest('hex'), user: admin.id, expires: Date.now() + 6e5 });
+  const api = createApi({ store: { run: async (fn) => fn(root) }, env, fetchImpl });
+  root.put('sessions', { id: createHash('sha256').update('tok').digest('hex'), ws: WS, user: admin.id, expires: Date.now() + 6e5 });
   const call = async (path, body, headers = {}, raw) => { const r = await api.handle({ method: 'POST', path, query: new URLSearchParams(), headers: { host: 'deme.test', 'content-type': 'application/json', ...headers }, body, raw: raw ?? JSON.stringify(body), ip: '1' }); return { status: r.status, json: JSON.parse(r.body) }; };
   const pulled = await call('/api/shopify/pull', {}, { cookie: 'deme_sid=tok' });
   assert.equal(pulled.status, 200, JSON.stringify(pulled.json)); assert.equal(pulled.json.message, '1 new order, 1 slip made.');

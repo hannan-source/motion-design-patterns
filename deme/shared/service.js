@@ -5,8 +5,11 @@
 // `db` is a small synchronous interface:
 //   all(col) get(col, id) put(col, doc) del(col, id) next(counter) log(entry) logs(filter) tx(fn)
 
-import { ENTITIES, entityById, fieldsOf, can, levelOf, LEVELS, ROLES, MODULES, STARTER_LEDGERS } from './schema.js';
+import { entityById, fieldsOf, can as roleCan, levelOf as roleLevel, LEVELS, ROLES, STARTER_LEDGERS } from './schema.js';
+import { schemaFor } from './platform.js';
 import { positionById, DEFAULT_CENTRES, headOf, isHead, isMine } from './org.js';
+
+let ALL = null;   // every built-in list, for code that runs outside a workspace (tests, the preview)
 
 export class UserError extends Error { constructor(msg, status = 400) { super(msg); this.status = status; } }
 const fail = (msg, status) => { throw new UserError(msg, status); };
@@ -31,15 +34,27 @@ const UNIQUE = { items: 'code', styles: 'code', machines: 'code', shop_orders: '
 export function titleOf(entity, doc) {
   if (!doc) return '';
   const e = typeof entity === 'string' ? entityById[entity] : entity;
-  return String(doc[e.title] ?? doc.no ?? doc.name ?? doc.id);
+  return String(doc[e?.title] ?? doc.no ?? doc.name ?? doc.id);
 }
+const baseTitle = titleOf;
 
 const modulesFor = (e) => [e.module, ...(e.alsoWrite || [])];
-// `open` record types (the organisation itself) can be read by anyone who is signed in.
-const canRead = (user, e) => (!!e.open && !!user && !ROLES[user.role]?.outside) || modulesFor(e).some((m) => can(user, m, 'read'));
-const canWrite = (user, e) => !e.readonly && (can(user, e.module, e.level || 'write') || (e.alsoWrite || []).some((m) => can(user, m, 'write')));
-
-export function createService(db, { actions = {}, hash = null } = {}) {
+/**
+ * @param schema   the lists and areas of the workspace this service is for (from schemaFor); every built-in list when not given
+ * @param centres  the work centres a new workspace starts with (from its template)
+ */
+export function createService(db, { actions = {}, hash = null, schema = null, centres: startCentres = DEFAULT_CENTRES } = {}) {
+  const S = schema || (ALL ||= schemaFor());
+  const ENTITIES = S.ENTITIES, MODULES = S.MODULES;
+  // An area that is switched off for this workspace is closed to everyone, whatever their role.
+  const on = (module) => !S.mods || S.mods.has(module) || module === 'lists';
+  const levelOf = (user, module) => (on(module) ? roleLevel(user, module) : 'none');
+  const can = (user, module, level = 'read') => on(module) && roleCan(user, module, level);
+  // `open` record types (the organisation itself) can be read by anyone who is signed in, except an outside login.
+  const canRead = (user, e) => (!!e.open && !!user && !ROLES[user.role]?.outside) || modulesFor(e).some((m) => can(user, m, 'read'));
+  // A list a business set up for itself is written by everyone, or by admins only, as it chose.
+  const canWrite = (user, e) => !e.readonly && (e.custom ? can(user, 'lists', e.writers === 'admins' ? 'admin' : 'write') : can(user, e.module, e.level || 'write') || (e.alsoWrite || []).some((m) => can(user, m, 'write')));
+  const titleOf = (entity, doc) => baseTitle(typeof entity === 'string' ? S.byId[entity] : entity, doc);
   const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, extra: u.extra || [], active: u.active !== false, position: u.position || '', centre: u.centre || '', station: u.station || '', supplier: u.supplier || '', pending: u.pending || null };
   /** Emails to send once this request has been saved: [{ email, name, text, link, byName }]. The host sends them. */
   const outbox = [];
@@ -91,7 +106,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
   /** The starting structure: ledgers, work centres and their workstations. The first person is put in charge of Management. */
   function seedOrg(user, at) {
     const made = {};
-    for (const [key, name, about, stations] of DEFAULT_CENTRES) {
+    for (const [key, name, about, stations] of startCentres) {
       if (db.all('work_centres').some((c) => c.key === key || c.name.toLowerCase() === name.toLowerCase())) continue;
       const c = { id: newId(), key, name, about, createdAt: at, createdBy: user.id, updatedAt: at, updatedBy: user.id }; if (key === 'management') c.head = user.id;
       db.put('work_centres', c); made[key] = c.id;
@@ -101,7 +116,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
   }
   const centreByKey = (key) => db.all('work_centres').find((c) => c.key === key)?.id || '';
   const need = (ok, msg = 'You do not have access to this.') => { if (!ok) fail(msg, 403); };
-  const ent = (id) => entityById[id] || fail(`Unknown record type: ${id}`, 404);
+  const ent = (id) => S.byId[id] || fail(`Unknown record type: ${id}`, 404);
 
   // Some fields are not for everyone who can open the record: `secret` ones are for module admins,
   // `only` ones for people who hold a level on one of the named modules, written 'module' (read) or
@@ -140,8 +155,9 @@ export function createService(db, { actions = {}, hash = null } = {}) {
     }
   }
   function resolveRef(refEntity, v, label) {
+    if (!S.byId[refEntity]) fail(`${label} points at a list this business does not have.`);
     const hit = db.get(refEntity, v) || db.all(refEntity).find((d) => titleOf(refEntity, d).toLowerCase() === String(v).trim().toLowerCase() || String(d.code || '').toLowerCase() === String(v).trim().toLowerCase() || String(d.no || '').toLowerCase() === String(v).trim().toLowerCase());
-    if (!hit) fail(`${label}: nothing called "${v}" in ${entityById[refEntity].name}.`);
+    if (!hit) fail(`${label}: nothing called "${v}" in ${S.byId[refEntity]?.name || 'that list'}.`);
     return hit.id;
   }
   function validate(e, input, existing) {
@@ -208,17 +224,17 @@ export function createService(db, { actions = {}, hash = null } = {}) {
     findUserByEmail: (email) => db.all('users').find((u) => u.email === String(email || '').trim().toLowerCase()),
     getUser: (id) => db.get('users', id),
     publicUser,
-    async setup({ name, email, password }) {
-      if (svc.hasUsers()) fail('Deme is already set up. Sign in instead.', 409);
+    async setup({ name, email, password, google = false }) {
+      if (svc.hasUsers()) fail('This business is already set up. Sign in instead.', 409);
       // The first account belongs to whoever sets the system up, not to the founder: the founder
       // is added like everyone else and sees the result.
-      checkPassword(password);
-      const user = await makeUser({ name, email, password, role: 'admin' });
+      if (!google) checkPassword(password);
+      const user = await makeUser({ name, email, password: google ? '' : password, role: 'admin' });
       db.tx(() => {
         for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: user.createdAt, createdBy: user.id });
         const made = seedOrg(user, user.createdAt);
         Object.assign(user, { position: 'setup', centre: made.management || '' }); db.put('users', user);
-        db.log({ at: user.createdAt, user: user.id, userName: user.name, entity: 'users', id: user.id, action: 'setup', text: 'Deme was set up' });
+        db.log({ at: user.createdAt, user: user.id, userName: user.name, entity: 'users', id: user.id, action: 'setup', text: 'The business was set up' });
       });
       return publicUser(user);
     },
@@ -238,7 +254,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       db.tx(() => {
         if (first) { for (const [n, group] of STARTER_LEDGERS) db.put('ledgers', { id: newId(), name: n, group, createdAt: at, createdBy: user.id }); const made = seedOrg(user, at); Object.assign(user, { position: 'setup', centre: made.management || '' }); }
         db.put('users', user);
-        db.log({ at, user: user.id, userName: user.name, entity: 'users', id: user.id, action: first ? 'setup' : 'joined', text: first ? 'Deme was set up' : `${user.name} joined by Google sign-in and has yet to pick a position` });
+        db.log({ at, user: user.id, userName: user.name, entity: 'users', id: user.id, action: first ? 'setup' : 'joined', text: first ? 'The business was set up' : `${user.name} joined by Google sign-in and has yet to pick a position` });
       });
       return user;
     },
@@ -283,6 +299,22 @@ export function createService(db, { actions = {}, hash = null } = {}) {
       }
       if (input.password) { checkPassword(input.password); u.pass = await hash(input.password); }
       db.tx(() => { db.put('users', u); if (input.position) handOver(u); db.log({ at: new Date().toISOString(), user: user.id, userName: user.name, entity: 'users', id, action: 'updated', text: `Updated ${u.name}` }); });
+      return publicUser(u);
+    },
+    /**
+     * Invite someone by email. An admin may invite anyone; the head of a work centre may invite
+     * people into the positions of their own work centre that a head can confirm. The person gets
+     * a login with no password and a link to set one (or signs in with Google).
+     */
+    async invite(user, input) {
+      const pos = positionById[input.position];
+      const centre = input.centre || (pos ? centreByKey(pos.centre) : '');
+      need(isAdmin(user) || (pos && pos.approve === 'head' && isHead(centres(), user, centre || '-')), 'Only an admin, or the head of that work centre, can invite someone into it.');
+      const u = await makeUser({ name: input.name || String(input.email || '').split('@')[0], email: input.email, password: '', role: pos?.role || 'staff' });
+      if (pos) Object.assign(u, { position: pos.id, centre });
+      else if (centre) u.centre = centre;
+      u.invitedBy = user.id;
+      db.tx(() => { db.put('users', u); handOver(u); db.log({ at: u.createdAt, user: user.id, userName: user.name, entity: 'users', id: u.id, action: 'invited', text: `Invited ${u.name}${pos ? ` as ${pos.name}` : ''}` }); });
       return publicUser(u);
     },
     /**
@@ -444,7 +476,7 @@ export function createService(db, { actions = {}, hash = null } = {}) {
           if (btn.when && !btn.when.includes(doc.status)) fail(`This ${e.one.toLowerCase()} is ${e.statuses[doc.status]?.name.toLowerCase() || doc.status}; that step is not available.`);
           if (btn.form) { const coerced = {}; for (const [k, label, type, o = {}] of btn.form) { const v = coerce({ k, label, type, ...o }, payload[k]); if (v === undefined && o.req) fail(`${label} is needed.`); if (v !== undefined) coerced[k] = v; } payload = { ...payload, ...coerced }; }
         }
-        const result = def.run(ctx, payload, doc) || {};
+        const result = def.run(ctx, payload, doc, e) || {};
         return { message: result.message || null, doc: e ? strip(user, e, db.get(entityId, id)) : result.doc || null, data: result.data || null };
       });
     },
@@ -491,7 +523,8 @@ export function memoryDb(initial = null, onChange = null) {
     del(col, id) { delete s.cols[col]?.[id]; save(); },
     next(counter) { s.counters[counter] = (s.counters[counter] || 0) + 1; save(); return s.counters[counter]; },
     log(entry) { s.logs.push(entry); if (s.logs.length > 3000) s.logs.splice(0, s.logs.length - 3000); save(); },
-    logs: ({ entity, id, limit = 200 } = {}) => s.logs.filter((l) => (!entity || l.entity === entity) && (!id || l.id === id)).slice(-limit).reverse(),
+    logs: ({ entity, id, limit = 200, ws } = {}) => s.logs.map((l, i) => ({ seq: i + 1, ...l })).filter((l) => (!ws || l.ws === ws) && (!entity || l.entity === entity) && (!id || l.id === id)).slice(-limit).reverse(),
+    logsAfter: (seq, limit = 200, ws = null) => s.logs.map((l, i) => ({ seq: i + 1, ...l })).filter((l) => l.seq > seq && (!ws || l.ws === ws)).slice(0, limit),
     tx(fn) { const snap = structuredClone(s); depth++; try { const out = fn(); depth--; save(); return out; } catch (e) { s = snap; depth--; throw e; } },
     dump: () => s,
   };

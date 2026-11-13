@@ -41,6 +41,44 @@ function styleFor(ctx, line) {
 }
 
 export const SLIP_ACTIONS = {
+  // A list a business set up for itself moves through the statuses it chose, forward and back.
+  'list.next': { run(ctx, _p, doc, e) { const keys = Object.keys(e.statuses || {}), i = keys.indexOf(doc.status); if (i < 0 || i >= keys.length - 1) ctx.fail('It is already at the last status.'); ctx.setStatus(e.id, doc, keys[i + 1]); return { message: `Now ${e.statuses[keys[i + 1]].name.toLowerCase()}.` }; } },
+  'list.back': { run(ctx, _p, doc, e) { const keys = Object.keys(e.statuses || {}), i = keys.indexOf(doc.status); if (i <= 0) ctx.fail('It is already at the first status.'); ctx.setStatus(e.id, doc, keys[i - 1]); return { message: `Back to ${e.statuses[keys[i - 1]].name.toLowerCase()}.` }; } },
+  /**
+   * Close many slips at once from what was read off a photograph of the day's printed slips,
+   * after a person has checked the list. Each slip is brought to where the paper says it is:
+   * passed, back for rework, or rejected. A slip already past that point is left alone.
+   * `items`: [{ no, outcome: 'pass'|'rework'|'reject', reason, tailor }]
+   */
+  'slip.closeMany': {
+    module: ['production', 'quality'], level: 'write',
+    run(ctx, { items }) {
+      if (!Array.isArray(items) || !items.length) ctx.fail('There is nothing to save.');
+      if (items.length > 200) ctx.fail('Save up to 200 slips at a time.');
+      const byNo = new Map(ctx.all('slips').map((s) => [String(s.no).toUpperCase(), s])), people = ctx.all('users').filter((u) => u.active !== false);
+      const done = { pass: 0, rework: 0, reject: 0 }, skipped = [];
+      for (const it of items) {
+        if (!it || typeof it !== 'object') continue;
+        const s = byNo.get(String(it.no || '').trim().toUpperCase());
+        if (!s) { skipped.push(`${short(it.no, 20)}: no such slip`); continue; }
+        if (['passed', 'finished', 'packed', 'dispatched', 'cancelled'].includes(s.status)) { skipped.push(`${s.no}: already ${s.status}`); continue; }
+        if (!['pass', 'rework', 'reject'].includes(it.outcome)) { skipped.push(`${s.no}: no outcome given`); continue; }
+        if (it.outcome !== 'pass' && !REASON[it.reason]) { skipped.push(`${s.no}: needs a reason`); continue; }
+        // The name written on the slip: a team member if it matches one, else kept as written.
+        const written = String(it.tailor || '').trim();
+        if (written) { const u = people.find((p) => same(p.name, written) || same(p.name.split(/\s+/)[0], written)); if (u) s.tailor = u.id; s.madeBy = written.slice(0, 60); }
+        s.noFabric = false;
+        if (it.outcome === 'pass') { s.qcReason = undefined; stop(ctx, s, 'passed', 'QC passed', 'read from the slip photo'); }
+        else if (it.outcome === 'rework') { s.qcReason = it.reason; s.reworks = (s.reworks || 0) + 1; stop(ctx, s, 'rework', `QC sent back: ${REASON[it.reason].toLowerCase()}`, 'read from the slip photo'); if (s.tailor) ctx.notify(s.tailor, `Slip ${s.no} is back for rework: ${REASON[it.reason].toLowerCase()}`, link(s)); }
+        else { s.qcReason = it.reason; stop(ctx, s, 'rejected', `QC rejected: ${REASON[it.reason].toLowerCase()}`, 'read from the slip photo'); }
+        if (it.outcome !== 'pass') tellAsker(ctx, s, `Your order ${what(ctx, s)} ${it.outcome === 'rework' ? 'went back for rework' : 'was rejected at QC'}: ${REASON[it.reason].toLowerCase()}`);
+        done[it.outcome]++;
+      }
+      const n = done.pass + done.rework + done.reject;
+      if (!n) ctx.fail(`Nothing was saved. ${skipped.slice(0, 3).join('; ')}.`);
+      return { message: `${n} ${n === 1 ? 'slip' : 'slips'} saved: ${done.pass} passed${done.rework ? `, ${done.rework} back for rework` : ''}${done.reject ? `, ${done.reject} rejected` : ''}.${skipped.length ? ` ${skipped.length} left as they were.` : ''}`, data: { ...done, skipped } };
+    },
+  },
   // An online order typed or imported in another currency is also stated in rupees.
   'hook.created.shop_orders': { run(ctx, _p, doc) { if (doc.currency && doc.currency !== 'INR' && doc.amountInr === undefined) { const v = ctx.toInr(doc.amount || 0, doc.currency, doc.date); if (v !== null) { doc.amountInr = v; ctx.put('shop_orders', doc); } } } },
   'hook.created.media_days': { run(ctx, _p, doc) { const v = ctx.toInr(doc.spend || 0, doc.currency || 'INR', doc.date); if (v !== null && doc.spendInr !== v) { doc.spendInr = v; doc.from ||= 'Typed in'; ctx.put('media_days', doc); } } },

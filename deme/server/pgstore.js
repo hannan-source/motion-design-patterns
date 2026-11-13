@@ -20,6 +20,8 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS counters (name text PRIMARY KEY, n bigint NOT NULL);
   CREATE TABLE IF NOT EXISTS logs (seq bigserial PRIMARY KEY, at text, usr text, user_name text, entity text, id text, action text, text text);
   CREATE INDEX IF NOT EXISTS logs_entity ON logs (entity, id);
+  ALTER TABLE logs ADD COLUMN IF NOT EXISTS ws text;
+  CREATE INDEX IF NOT EXISTS logs_ws ON logs (ws, seq);
 `;
 const logRow = (r) => ({ seq: Number(r.seq), at: r.at, user: r.usr, userName: r.user_name, entity: r.entity, id: r.id, action: r.action, text: r.text });
 
@@ -39,9 +41,10 @@ export function createPgStore(sql) {
         if (what.counter) { await ver(`#counter:${what.counter}`); const rows = await sql.query('SELECT n FROM counters WHERE name = $1', [what.counter]); counters.set(what.counter, rows[0] ? Number(rows[0].n) : 0); }
         if (what.logs) {
           const f = what.logs;
-          if (f.after !== undefined) logCache.set(f.key, (await sql.query('SELECT * FROM logs WHERE seq > $1 ORDER BY seq ASC LIMIT $2', [f.after, f.limit])).map(logRow));
+          if (f.after !== undefined) logCache.set(f.key, (f.ws ? await sql.query('SELECT * FROM logs WHERE seq > $1 AND ws = $3 ORDER BY seq ASC LIMIT $2', [f.after, f.limit, f.ws]) : await sql.query('SELECT * FROM logs WHERE seq > $1 ORDER BY seq ASC LIMIT $2', [f.after, f.limit])).map(logRow));
           else {
             const where = [], args = [];
+            if (f.ws) { args.push(f.ws); where.push(`ws = $${args.length}`); }
             if (f.entity) { args.push(f.entity); where.push(`entity = $${args.length}`); }
             if (f.id) { args.push(f.id); where.push(`id = $${args.length}`); }
             args.push(Math.min(1000, f.limit || 200));
@@ -80,8 +83,8 @@ export function createPgStore(sql) {
           del(col, id) { const k = `${col}/${id}`; puts.delete(k); dels.add(k); wrote.add(col); },
           next(name) { if (!counters.has(name)) throw new Need({ counter: name }); const n = (newCounters.get(name) ?? counters.get(name)) + 1; newCounters.set(name, n); wrote.add(`#counter:${name}`); return n; },
           log(e) { newLogs.push(e); },
-          logs(f = {}) { const key = `q:${f.entity || ''}:${f.id || ''}:${f.limit || 200}`; if (!logCache.has(key)) throw new Need({ logs: { ...f, key } }); return logCache.get(key); },
-          logsAfter(after, limit = 200) { const key = `a:${after}:${limit}`; if (!logCache.has(key)) throw new Need({ logs: { after, limit, key } }); return logCache.get(key); },
+          logs(f = {}) { const key = `q:${f.ws || ''}:${f.entity || ''}:${f.id || ''}:${f.limit || 200}`; if (!logCache.has(key)) throw new Need({ logs: { ...f, key } }); return logCache.get(key); },
+          logsAfter(after, limit = 200, ws = null) { const key = `a:${ws || ''}:${after}:${limit}`; if (!logCache.has(key)) throw new Need({ logs: { after, limit, key, ws } }); return logCache.get(key); },
           tx(f) { return f(); },
         };
         let result;
@@ -109,9 +112,9 @@ export function createPgStore(sql) {
             for (const [name, n] of newCounters) await q('INSERT INTO counters (name, n) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET n = excluded.n', [name, n]);
             for (let n = 0; n < newLogs.length; n += BATCH) {
               const part = newLogs.slice(n, n + BATCH), col = (f) => part.map((e) => (e[f] == null ? null : String(e[f])));
-              await q(`INSERT INTO logs (at, usr, user_name, entity, id, action, text)
-                SELECT a, u, un, e, i, ac, t FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[]) WITH ORDINALITY AS x(a, u, un, e, i, ac, t, ord) ORDER BY ord`,
-              [col('at'), col('user'), col('userName'), col('entity'), col('id'), col('action'), col('text')]);
+              await q(`INSERT INTO logs (at, usr, user_name, entity, id, action, text, ws)
+                SELECT a, u, un, e, i, ac, t, w FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[]) WITH ORDINALITY AS x(a, u, un, e, i, ac, t, w, ord) ORDER BY ord`,
+              [col('at'), col('user'), col('userName'), col('entity'), col('id'), col('action'), col('text'), col('ws')]);
             }
             await q('UPDATE col_versions SET v = v + 1 WHERE col = ANY($1)', [[...wrote]]);
           });

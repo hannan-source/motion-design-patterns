@@ -18,13 +18,16 @@ export function openDb(file) {
     CREATE INDEX IF NOT EXISTS logs_entity ON logs (entity, id);
     CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user TEXT NOT NULL, expires INTEGER NOT NULL);
   `);
+  // Each log line belongs to one workspace (one business). Older databases gain the column here.
+  try { sql.exec('ALTER TABLE logs ADD COLUMN ws TEXT'); } catch { /* already there */ }
+  sql.exec('CREATE INDEX IF NOT EXISTS logs_ws ON logs (ws, seq)');
   const q = {
     all: sql.prepare('SELECT data FROM docs WHERE col = ?'),
     get: sql.prepare('SELECT data FROM docs WHERE col = ? AND id = ?'),
     put: sql.prepare('INSERT INTO docs (col, id, data) VALUES (?, ?, ?) ON CONFLICT (col, id) DO UPDATE SET data = excluded.data'),
     del: sql.prepare('DELETE FROM docs WHERE col = ? AND id = ?'),
     next: sql.prepare('INSERT INTO counters (name, n) VALUES (?, 1) ON CONFLICT (name) DO UPDATE SET n = n + 1 RETURNING n'),
-    log: sql.prepare('INSERT INTO logs (at, user, userName, entity, id, action, text) VALUES (?, ?, ?, ?, ?, ?, ?)'),
+    log: sql.prepare('INSERT INTO logs (at, user, userName, entity, id, action, text, ws) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   };
   let depth = 0;
   const db = {
@@ -33,14 +36,15 @@ export function openDb(file) {
     put: (col, doc) => { q.put.run(col, doc.id, JSON.stringify(doc)); },
     del: (col, id) => { q.del.run(col, id); },
     next: (name) => q.next.get(name).n,
-    log: (e) => { q.log.run(e.at, e.user, e.userName, e.entity ?? null, e.id ?? null, e.action, e.text); },
-    logs({ entity, id, limit = 200 } = {}) {
+    log: (e) => { q.log.run(e.at, e.user, e.userName, e.entity ?? null, e.id ?? null, e.action, e.text, e.ws ?? null); },
+    logs({ entity, id, limit = 200, ws } = {}) {
       const where = [], args = [];
+      if (ws) { where.push('ws = ?'); args.push(ws); }
       if (entity) { where.push('entity = ?'); args.push(entity); }
       if (id) { where.push('id = ?'); args.push(id); }
       return sql.prepare(`SELECT seq, at, user, userName, entity, id, action, text FROM logs ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY seq DESC LIMIT ?`).all(...args, Math.min(1000, limit));
     },
-    logsAfter: (seq, limit = 200) => sql.prepare('SELECT seq, at, user, userName, entity, id, action, text FROM logs WHERE seq > ? ORDER BY seq ASC LIMIT ?').all(seq, limit),
+    logsAfter: (seq, limit = 200, ws = null) => (ws ? sql.prepare('SELECT seq, at, user, userName, entity, id, action, text FROM logs WHERE seq > ? AND ws = ? ORDER BY seq ASC LIMIT ?').all(seq, ws, limit) : sql.prepare('SELECT seq, at, user, userName, entity, id, action, text FROM logs WHERE seq > ? ORDER BY seq ASC LIMIT ?').all(seq, limit)),
     /** All-or-nothing: if anything inside throws, nothing is saved. */
     tx(fn) {
       if (depth++ === 0) sql.exec('BEGIN IMMEDIATE');

@@ -3,10 +3,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createService, memoryDb } from '../shared/service.js';
 import { ACTIONS } from '../shared/actions.js';
+import { settingsFrom, scopeDb } from '../shared/platform.js';
 import { createApi } from '../server/app.js';
 import { DEFAULT_CENTRES } from '../shared/org.js';
 
-const db = memoryDb();
+// One business on the platform: `root` is the whole database, `db` is this business's view of it.
+const root = memoryDb(), WS = 'w00000000001';
+root.put('workspaces', { id: WS, settings: settingsFrom('apparel', 'Test Business'), secrets: {}, status: 'on', createdAt: new Date().toISOString() });
+const db = scopeDb(root, WS);
 const svc = createService(db, { actions: ACTIONS, hash: async (p) => `h:${p}` });
 const fresh = (id) => svc.getUser(id);
 const admin = fresh((await svc.setup({ name: 'Hannan', email: 'admin@deme.test', password: 'correct-horse' })).id);
@@ -126,12 +130,12 @@ test('a project limited to its work centre is hidden from everyone else', () => 
 
 test('notices are emailed once the request is saved, when email is switched on', async () => {
   const sent = [];
-  const store = { run: async (fn) => fn(db) };
+  const store = { run: async (fn) => fn(root) };
   const api = createApi({ store, env: { RESEND_API_KEY: 'k', MAIL_FROM: 'Deme <x@deme.test>', PUBLIC_URL: 'https://deme.test' }, fetchImpl: async (url, init) => { sent.push({ url, body: JSON.parse(init.body), auth: init.headers.authorization }); return { ok: true, status: 200 }; } });
   const call = async (method, path, body, cookie) => { const r = await api.handle({ method, path, query: new URLSearchParams(), headers: { host: 'deme.test', 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body || {}, ip: '1' }); return { status: r.status, json: JSON.parse(r.body), cookie: (r.cookies[0] || '').split(';')[0] }; };
   // act through the API as Nidhi by planting a session for her
   const { createHash } = await import('node:crypto');
-  db.put('sessions', { id: createHash('sha256').update('tok').digest('hex'), user: nidhi.id, expires: Date.now() + 6e5 });
+  root.put('sessions', { id: createHash('sha256').update('tok').digest('hex'), ws: WS, user: nidhi.id, expires: Date.now() + 6e5 });
   const r = await call('POST', '/api/action/task.ask', { payload: { centre: centre('production').id, title: 'Quote for 200 units' } }, 'deme_sid=tok');
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal(sent.length, 1);

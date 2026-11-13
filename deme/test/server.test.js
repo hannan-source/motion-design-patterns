@@ -69,7 +69,7 @@ test('a service key acts with its role and can be switched off', async () => {
   const founder = (await call('POST', '/api/login', { email: 'founder@example.com', password: 'a-long-password' })).cookie;
   const made = await call('POST', '/api/keys', { name: 'Gate scanner', role: 'logistics' }, founder);
   assert.equal(made.status, 200);
-  assert.match(made.json.key, /^deme_[a-f0-9]{48}$/);
+  assert.match(made.json.key, /^lyc_w[a-f0-9]{11}_[a-f0-9]{48}$/);
   const withKey = async (method, path, body) => { const r = await fetch(base + path, { method, headers: { Authorization: `Bearer ${made.json.key}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, json: await r.json().catch(() => null) }; };
   assert.equal((await withKey('GET', '/api/data/parcels')).status, 200, 'logistics can read parcels');
   assert.equal((await withKey('GET', '/api/data/vouchers')).status, 403, 'but not finance');

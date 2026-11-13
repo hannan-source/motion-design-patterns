@@ -70,6 +70,8 @@ export const ROLES = {
 /** Effective level a user holds on a module: role level, raised by any extra grants on the user. */
 export function levelOf(user, module) {
   if (!user) return 'none';
+  // Lists a business set up for itself: open to its own people, shaped by its admins.
+  if (module === 'lists') return ROLES[user.role]?.outside || user.role === 'operator' ? 'none' : ROLES[user.role]?.perms.admin === 'admin' ? 'admin' : 'write';
   const base = ROLES[user.role]?.perms[module] || 'none';
   const extra = (user.extra || []).includes(module) ? 'write' : 'none';
   return LEVELS.indexOf(extra) > LEVELS.indexOf(base) ? extra : base;
@@ -90,13 +92,13 @@ export const ENTITIES = [
     fields: [['code', 'Code', 'text', { req: true, list: true }], ['name', 'Name', 'text', { req: true, list: true }],
       ['kind', 'Kind', 'select', { req: true, list: true, options: opt(['fabric', 'Fabric'], ['thread', 'Thread'], ['trim', 'Trim'], ['tool', 'Tool'], ['consumable', 'Consumable']) }],
       ['unit', 'Unit', 'select', { req: true, list: true, options: opt('m', 'cones', 'pcs', 'boxes', 'pairs', 'kg') }], ['shade', 'Shade', 'text', { list: true }],
-      ['rfd', 'Ready for dyeing (RFD)', 'bool', { hint: 'Fabric that goes from the mill straight to the dye house' }], ['cost', 'Cost per unit', 'money', {}], ['dyeCost', 'Dyeing cost per metre', 'money', { hint: 'Fabric only' }], ['minLevel', 'Minimum level', 'number', { list: true }],
+      ['rfd', 'Ready for dyeing (RFD)', 'bool', { hint: 'Fabric that goes from the mill straight to the dye house', pack: 'apparel' }], ['cost', 'Cost per unit', 'money', {}], ['dyeCost', 'Dyeing cost per metre', 'money', { hint: 'Fabric only', pack: 'apparel' }], ['minLevel', 'Minimum level', 'number', { list: true }],
       ['onHand', 'On hand', 'number', { ro: true, list: true }], ['location', 'Kept at', 'text', {}]] },
   { id: 'styles', module: 'masters', name: 'Styles', one: 'Style', title: 'name', open: true,   // everyone needs the names to follow and place orders; prices and the bill of materials stay with those who work on them
     info: 'Each garment Deme makes. Standard minutes per piece at each stage drive the production plan, and the fabric and thread per piece drive material checks. Bundle scans show how far real minutes are from these.',
     fields: [['code', 'Style code', 'text', { req: true, list: true }], ['name', 'Name', 'text', { req: true, list: true }], ['collection', 'Collection', 'ref', { ref: 'collections' }],
-      ['fabric', 'Main fabric', 'ref', { ref: 'items', list: true }], ['shade', 'Shade', 'text', { list: true }], ['metres', 'Fabric per piece (m)', 'number', {}], ['cones', 'Thread cones per 100 pieces', 'number', {}],
-      ['smvCut', 'Cutting minutes', 'number', { req: true }], ['smvStitch', 'Stitching minutes', 'number', { req: true, list: true }], ['smvFinish', 'Finishing minutes', 'number', { req: true }], ['smvQc', 'QC minutes', 'number', { req: true }], ['smvPack', 'Packing minutes', 'number', { req: true }],
+      ['fabric', 'Main fabric', 'ref', { ref: 'items', list: true, pack: 'apparel' }], ['shade', 'Shade', 'text', { list: true, pack: 'apparel' }], ['metres', 'Fabric per piece (m)', 'number', { pack: 'apparel' }], ['cones', 'Thread cones per 100 pieces', 'number', { pack: 'apparel' }],
+      ['smvCut', 'Cutting minutes', 'number', { req: true, pack: 'apparel' }], ['smvStitch', 'Stitching minutes', 'number', { req: true, list: true, pack: 'apparel' }], ['smvFinish', 'Finishing minutes', 'number', { req: true, pack: 'apparel' }], ['smvQc', 'QC minutes', 'number', { req: true, pack: 'apparel' }], ['smvPack', 'Packing minutes', 'number', { req: true, pack: 'apparel' }],
       ['wholesale', 'Wholesale price', 'money', { only: ['masters', 'b2b', 'finance'] }], ['retail', 'Retail price', 'money', { list: true }],
       ['bom', 'Bill of materials', 'lines', { only: ['masters', 'production'], cols: [['item', 'Material', 'ref', { ref: 'items' }], ['qty', 'Per piece', 'number', {}]] }],
       ['status', 'Status', 'select', { def: 'active', list: true, options: opt(['development', 'In development'], ['active', 'Active'], ['discontinued', 'Discontinued']) }]] },
@@ -140,7 +142,7 @@ export const ENTITIES = [
     actions: [{ id: 'grn.post', label: 'Post receipt', when: ['draft'] }] },
 
   // ── Inventory ──
-  { id: 'rolls', module: 'inventory', name: 'Fabric rolls', one: 'Fabric roll', no: 'R', title: 'no',
+  { id: 'rolls', module: 'inventory', name: 'Fabric rolls', one: 'Fabric roll', no: 'R', title: 'no', pack: 'apparel',
     info: 'One record per roll, from the dock to the cutting table. Rolls that were never checked can be added here as an opening audit; they then go through inspection like any new roll.',
     statuses: S(['received', 'Awaiting inspection', 'warn'], ['passed', 'Passed', 'ok'], ['rejected', 'Rejected', 'crit'], ['returned', 'Returned to mill'], ['at_dyer', 'At the dyer', 'info'], ['dyed', 'Dyed, in store', 'ok'], ['dye_reject', 'Failed after dyeing', 'crit'], ['issued', 'Issued to cutting']),
     initial: 'received',
@@ -351,7 +353,7 @@ export const ENTITIES = [
       ['style', 'Style', 'ref', { ref: 'styles', list: true }], ['styleName', 'Ordered as', 'text', {}], ['size', 'Size', 'text', { list: true }], ['colour', 'Fabric and colour', 'text', {}], ['measurements', 'Measurements and notes', 'long', { personal: true }],
       ['priority', 'Priority', 'select', { def: 'medium', list: true, options: opt(['high', 'High'], ['medium', 'Medium'], ['low', 'Low']) }], ['priorityReason', 'Why high', 'text', {}], ['promised', 'Promised', 'date', { list: true }],
       ['raisedBy', 'Asked by', 'user', { list: true }], ['team', 'Team', 'ref', { ref: 'work_centres' }], ['purpose', 'Purpose', 'text', {}],
-      ['master', 'Master', 'text', { only: ['production:write'] }], ['tailor', 'Tailor', 'user', { only: ['production:write'] }],
+      ['master', 'Master', 'text', { only: ['production:write'] }], ['tailor', 'Tailor', 'user', { only: ['production:write'] }], ['madeBy', 'Tailor, as written on the slip', 'text', { only: ['production:write'] }],
       ['noFabric', 'Missing fabric', 'bool', { list: true }], ['stuck', 'What is missing', 'text', {}], ['needsInfo', 'Needs measurements', 'bool', {}], ['reworks', 'Times reworked', 'number', {}], ['qcReason', 'QC reason', 'select', { options: GARMENT_REASONS }],
       ['events', 'Trail', 'lines', { only: ['production:write', 'quality:write'], cols: [['at', 'When', 'datetime', {}], ['stage', 'Stop', 'text', {}], ['by', 'By', 'text', {}], ['note', 'Note', 'text', {}]] }]],
     actions: [{ id: 'slip.assign', label: 'Give to a master', when: ['new', 'assigned'], form: [['master', 'Master', 'text', { req: true }]] }, { id: 'slip.cut', label: 'Cut', when: ['assigned'] },
