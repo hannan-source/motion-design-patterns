@@ -2,7 +2,7 @@
 // Each view module exports mount(el, ctx) and returns a cleanup function.
 
 import { api, data } from './api.js';
-import { $, esc, info, wireInfo, oops, busy, toast } from './ui.js';
+import { $, esc, info, wireInfo, wireDepth, oops, busy, toast } from './ui.js';
 import { mountField, cssVarFor } from './fx.js';
 import { MODULES, ROLES, ENTITIES, entityById } from '../shared/schema.js';
 import { positionById, isHead } from '../shared/org.js';
@@ -46,7 +46,7 @@ function menu() {
   if (has('dye_lots') && c('quality', 'scan')) floor.push(['dye', 'Dye house']);
   if (has('parcels') && (c('logistics', 'write') || c('b2c', 'write') || c('production', 'write'))) floor.push(['gate', 'Dispatch gate']);
   floor.push(['myday', 'My day']);
-  if (has('payslips') && c('hr', 'read')) floor.push(['people', 'People and pay']);
+  if (has('payslips')) floor.push(['people', c('hr', 'read') ? 'People and pay' : 'My pay and leave']);
   const start = [['guide', 'Guide']];
   if (has('media_days') && c('marketing', 'read')) top.push(['channels', 'Channels']);
   if (c('admin', 'admin')) start.unshift(['build', 'Build']);
@@ -311,7 +311,7 @@ async function start() {
   }
 }
 
-wireInfo();
+wireInfo(); wireDepth();
 window.addEventListener('hashchange', route);
 // A request that comes back "sign in" means the session ended: return to the sign-in screen.
 window.addEventListener('unhandledrejection', (e) => { if (e.reason?.status === 401 && data.ready) { data.clear(); start(); } else if (e.reason?.message) oops(e.reason); });

@@ -59,6 +59,8 @@ export function createService(db, { actions = {}, hash = null, schema = null, ce
   const publicUser = (u) => u && { id: u.id, name: u.name, email: u.email, role: u.role, extra: u.extra || [], active: u.active !== false, position: u.position || '', centre: u.centre || '', station: u.station || '', supplier: u.supplier || '', pending: u.pending || null };
   /** Emails to send once this request has been saved: [{ email, name, text, link, byName }]. The host sends them. */
   const outbox = [];
+  // Calls to make to other systems once this request is safely saved (a workflow's webhook step). The host delivers them.
+  const sends = [];
   const centres = () => db.all('work_centres');
   const isAdmin = (user) => can(user, 'admin', 'admin');
 
@@ -216,6 +218,12 @@ export function createService(db, { actions = {}, hash = null, schema = null, ce
       sees: (entityId, doc) => visible(user, ent(entityId), doc),
       why: (entityId) => RULES[entityId]?.why || 'Your role cannot change this.',
       handOver, seedOrg, centreByKey, toInr,
+      /** Run another step by name, as the same person, inside this request. How packs use each other without sharing code. */
+      step: (actionId, payload = {}, doc = null) => (actions[actionId] || fail(`Unknown step: ${actionId}`)).run(ctx, payload, doc),
+      /** Queue a call to another system, made after this request is saved: { kind: 'webhook', url, body }. */
+      queue: (item) => { if (sends.length < 20) sends.push(item); },
+      /** The definition of one of this business's lists (fields, statuses), or undefined when it has no such list. */
+      listDef: (id) => S.byId[id],
       /** Does the person doing this hold that level on the module? */
       can: (module, level = 'read') => can(user, module, level),
     };
@@ -504,7 +512,7 @@ export function createService(db, { actions = {}, hash = null, schema = null, ce
       const att = db.all('attendance').filter((a) => a.employee === emp.id);
       return { employee, today: att.find((a) => a.date === t) || null, month: att.filter((a) => a.date.slice(0, 7) === t.slice(0, 7)), leaves: db.all('leaves').filter((l) => l.employee === emp.id), kras: db.all('kras').filter((k) => k.employee === emp.id) };
     },
-    levelOf, can, outbox,
+    levelOf, can, outbox, sends,
   };
 
   function checkPassword(p) { if (typeof p !== 'string' || p.length < 8) fail('Use a password of at least 8 characters.'); }

@@ -1,6 +1,6 @@
-// How fabric and work really move at Deme, where that differs from a textbook factory:
+// How fabric and work really move at a made-to-order garment maker, where that differs from a textbook factory:
 //  - ready-for-dyeing fabric goes from the mill straight to the dye house, and is passed either
-//    on the mill's own QC report or by Deme's person there;
+//    on the mill's own QC report or by the business's person there;
 //  - fabric that fails is the supplier's to answer for, so a claim stays open until the credit
 //    note or the replacement arrives;
 //  - the dye house reports problems from a phone, with photos;
@@ -71,8 +71,8 @@ function fabricCheck(ctx, doc) {
 const publicCheck = (rows) => rows.map(({ take, ...r }) => r);
 
 export const FLOOR_ACTIONS = {
-  // ── Fabric that never comes through Deme's own dock ──
-  /** Pass a roll on the strength of the mill's QC report, without Deme inspecting it again. */
+  // ── Fabric that never comes through the business's own dock ──
+  /** Pass a roll on the strength of the mill's QC report, without the business inspecting it again. */
   'roll.accept': {
     run(ctx, _p, doc) {
       const grn = doc.grn ? ctx.get('goods_receipts', doc.grn) : null;
@@ -87,7 +87,7 @@ export const FLOOR_ACTIONS = {
   'claim.drop': {
     run(ctx, { note }, doc) {
       Object.assign(doc, { note, closedOn: ctx.today });
-      // The supplier will not pay, so the debit note is reversed and the cost becomes Deme's.
+      // The supplier will not pay, so the debit note is reversed and the cost becomes the business's.
       const s = ctx.get('suppliers', doc.supplier);
       if (s) ctx.voucher({ type: 'Journal', party: s.name, dr: 'Fabric Loss: Post-Dye Defects', cr: ctx.ledgerOf('suppliers', s.id), amount: doc.amount, narration: `Claim ${doc.no} dropped: ${note}`, ref: doc.no });
       ctx.setStatus('claims', doc, 'dropped', `Claim ${doc.no} dropped: ${note}`);
@@ -96,13 +96,13 @@ export const FLOOR_ACTIONS = {
   },
 
   // ── The dye house reports from a phone ──
-  /** The dye lots a person may report on: their own dye house's for an outside login, every open one for Deme's people. */
+  /** The dye lots a person may report on: their own dye house's for an outside login, every open one for the business's people. */
   'fabric.myLots': {
     module: 'quality', level: 'scan',
     run(ctx) {
       const me = ctx.get('users', ctx.user.id) || ctx.user;
       const outside = ctx.user.role === 'dyer';
-      if (outside && !me.supplier) ctx.fail('This login is not linked to a dye house yet. Ask Deme to link it.');
+      if (outside && !me.supplier) ctx.fail('This login is not linked to a dye house yet. Ask the office to link it.');
       const lots = ctx.all('dye_lots').filter((l) => l.status === 'at_dyer' && (!outside || l.dyer === me.supplier))
         .map((l) => ({ id: l.id, no: l.no, shade: l.shade, dyer: ctx.title('suppliers', l.dyer), sentOn: l.sentOn, dueBack: l.dueBack, rolls: (l.rolls || []).map((id) => ctx.get('rolls', id)).filter(Boolean).map((r) => ({ id: r.id, no: r.no, metres: r.metres })) }));
       // Rolls delivered straight to the dye house and not yet on a lot.
@@ -185,7 +185,7 @@ export const FLOOR_ACTIONS = {
       return { message: `${qty(pieces)} pieces of ${doc.no} are back: ${qty(total)} of ${qty(doc.qty)}. They now go to final QC here.` };
     },
   },
-  /** Deme's QC at the vendor passed and packed pieces there; they ship from the vendor. */
+  /** the business's QC at the vendor passed and packed pieces there; they ship from the vendor. */
   'wo.vendorPassed': {
     run(ctx, { pieces, rejected = 0 }, doc) {
       if (doc.qcAt !== 'vendor') ctx.fail(`${doc.no} is checked in-house. Record it as received from the vendor instead.`);

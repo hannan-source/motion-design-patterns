@@ -217,7 +217,7 @@ export function mount(el, ctx) {
     const done = steps.filter((s) => s.done).length;
     return `
       <section class="panel hm-panel hm-start" aria-labelledby="hmStartH">
-        <div class="panel-head"><div class="title-row"><h2 id="hmStartH">Getting started</h2>${info('Deme starts empty. Work centres, materials and styles are what the production plan is built from, so add those first; suppliers and customers are needed for purchase orders and sales orders. Each step is ticked from what is really in the lists, and this page turns into the daily view once the first work order or sale is in.', 'Getting started')}</div><span class="wk-n">${esc(`${done} of ${steps.length} done`)}</span></div>
+        <div class="panel-head"><div class="title-row"><h2 id="hmStartH">Getting started</h2>${info('A new business starts empty. Work centres, materials and styles are what the production plan is built from, so add those first; suppliers and customers are needed for purchase orders and sales orders. Each step is ticked from what is really in the lists, and this page turns into the daily view once the first work order or sale is in.', 'Getting started')}</div><span class="wk-n">${esc(`${done} of ${steps.length} done`)}</span></div>
         <div class="bar" role="presentation"><i style="--v:${steps.length ? Math.round((done / steps.length) * 100) : 0}%"></i></div>
         <ol class="hm-steps">${steps.map((s) => `<li><button type="button" class="hm-step${s.done ? ' is-done' : ''}" data-step="${esc(s.key)}"><span class="hm-tick">${TICK}</span><span class="hm-step-title">${esc(s.label)}</span><span class="hm-step-note">${esc(s.note)}</span>${ARROW}</button></li>`).join('')}</ol>
       </section>`;

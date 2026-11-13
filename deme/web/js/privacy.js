@@ -171,7 +171,7 @@ export function mount(el, ctx) {
     const keep = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined && o[k] !== null && o[k] !== '').map((k) => [k, o[k]]));
     const r = found.res, noOf = (id) => r.orders.find((o) => o.id === id)?.orderNo;
     const file = {
-      heldBy: 'Deme', searchedFor: found.q, madeOn: iso(today()),
+      heldBy: data.workspace?.name || 'The business', searchedFor: found.q, madeOn: iso(today()),
       orders: r.orders.map((o) => keep(o, ['orderNo', 'date', 'customerName', 'country', 'items', 'size', 'qty', 'currency', 'amount', 'amountInr', 'status', 'awb', 'erasedOn'])),
       slips: r.slips.map((s) => ({ ...keep(s, ['no', 'orderNo', 'customerName']), ...keep({ style: data.title('styles', s.style) || s.styleName }, ['style']), ...keep(s, ['size', 'colour', 'measurements', 'promised', 'status']) })),
       returns: r.returns.map((x) => ({ ...keep({ orderNo: noOf(x.order) }, ['orderNo']), ...keep(x, ['no', 'date', 'reason', 'condition', 'refund', 'status']) })),

@@ -9,7 +9,7 @@ import { POSITIONS, positionById } from '../shared/org.js';
 import { barcodeSvg } from '../shared/code128.js';
 import { mountPhotos } from './photos.js';
 
-// Record types that carry a tag Deme prints itself: what the barcode holds and the lines under it.
+// Record types that carry a tag the business prints itself: what the barcode holds and the lines under it.
 const LABELS = {
   rolls: (d) => ({ code: d.no, lines: [data.title('items', d.item), `${num(d.metres)} m${d.shade ? ` · ${d.shade}` : ''}`] }),
   bundles: (d) => ({ code: d.no, lines: [data.title('work_orders', d.workOrder), `${num(d.pieces)} pieces`] }),
@@ -200,7 +200,7 @@ export function mount(el, ctx) {
     const heads = fs.map((f) => f.label).join(',');
     const d = drawer(`<header class="drawer-head"><div><p class="eyebrow">Import</p><h2>${esc(e.name)}</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button></header>
       <div class="drawer-body stack">
-        <div class="field"><label for="impHeads">Column headings ${info('Put these headings in the first row of a spreadsheet, one record per row, then save or export it as CSV. Headings can be in any order and extra columns are ignored. Dates are written as 2026-03-31. Where a column refers to another record, such as a supplier or a style, type its name or code exactly as it appears in Deme.', 'Preparing the file')}</label>
+        <div class="field"><label for="impHeads">Column headings ${info('Put these headings in the first row of a spreadsheet, one record per row, then save or export it as CSV. Headings can be in any order and extra columns are ignored. Dates are written as 2026-03-31. Where a column refers to another record, such as a supplier or a style, type its name or code exactly as it appears here.', 'Preparing the file')}</label>
           <textarea class="input mono" id="impHeads" readonly rows="3">${esc(heads)}</textarea>
           <div class="row"><button class="btn btn-sm btn-outline" type="button" data-copy>Copy headings</button><span class="faint">${fs.filter((f) => f.req).length ? `Needed: ${esc(fs.filter((f) => f.req).map((f) => f.label).join(', '))}` : ''}</span></div></div>
         <div class="field"><label for="impFile">CSV file</label><input class="input" id="impFile" type="file" accept=".csv,text/csv,text/plain"></div>
@@ -228,7 +228,7 @@ export function mount(el, ctx) {
     const sheet = `<div class="label-sheet">${list.map((d) => { const l = LABELS[current](d); return `<div class="label">${barcodeSvg(l.code)}<strong class="mono">${esc(l.code)}</strong>${l.lines.filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join('')}</div>`; }).join('')}</div>`;
     const d = drawer(`<header class="drawer-head"><div><p class="eyebrow">Tags</p><h2>${esc(e.name)}</h2></div><button class="icon-btn" type="button" data-close aria-label="Close">×</button></header>
       <div class="drawer-body stack">
-        <div class="row"><span>${list.length} tag${list.length === 1 ? '' : 's'} ${info('Tags are Code 128 barcodes that any handheld scanner reads. The list follows the search and status filter on the screen behind, so filter first to print only new records. Stick the tag on the roll, bundle or piece; scanning it anywhere in Deme opens the record or takes you to the right scan screen.', 'Printing tags')}</span><div class="spacer"></div>${api.mode === 'server' ? '<button class="btn btn-primary" type="button" data-print>Print</button>' : ''}</div>
+        <div class="row"><span>${list.length} tag${list.length === 1 ? '' : 's'} ${info('Tags are Code 128 barcodes that any handheld scanner reads. The list follows the search and status filter on the screen behind, so filter first to print only new records. Stick the tag on the roll, bundle or piece; scanning it anywhere in the app opens the record or takes you to the right scan screen.', 'Printing tags')}</span><div class="spacer"></div>${api.mode === 'server' ? '<button class="btn btn-primary" type="button" data-print>Print</button>' : ''}</div>
         ${list.length ? sheet : '<div class="empty"><p>Nothing to print.</p></div>'}
       </div>`, { onClose: () => { open = null; } });
     open = { ...d, mode: 'tags' };
@@ -278,14 +278,14 @@ export function mount(el, ctx) {
     } else {
       const C = [
         ['Shopify', 'Orders in; stock and shipping status back.', 'Until this is connected, import the Shopify orders export as a CSV under B2C sales. Connecting needs a Shopify custom app with read access to orders and write access to fulfilments and inventory.'],
-        ['DHL', 'Tracking events against each parcel.', 'Until this is connected, add tracking updates on the parcel by hand. Connecting needs DHL Express API credentials for the Deme account; the tracking number on the label is the key.'],
+        ['DHL', 'Tracking events against each parcel.', 'Until this is connected, add tracking updates on the parcel by hand. Connecting needs DHL Express API credentials for the business\'s account; the tracking number on the label is the key.'],
         ['Tally', 'Vouchers and ledgers, both directions.', 'Until this is connected, use Finance > Vouchers > Tally export and import the XML in Tally. The live bridge is a small program on the accounts computer that posts vouchers to Tally\'s local port; see docs/TALLY-CONNECTOR.md.'],
         ['Fabric inspection camera', 'Defect score per roll from the inspection frame.', 'Until a camera is installed, a checker enters the penalty points for each roll under Inventory > Fabric rolls > Inspect. The camera will write the same inspection record.'],
         ['Gate and floor scanners', 'Barcodes typed into the scan screens.', 'Any handheld scanner that types like a keyboard already works on the Scan station and Dispatch gate screens. Nothing to connect.'],
       ];
-      body.innerHTML = `<div class="toolbar"><div class="title-row"><h2>Connections</h2>${info('Links to systems outside Deme Intelligence. None is switched on yet; each note says how the work is done in the meantime and what the connection needs.', 'Connections')}</div></div>
+      body.innerHTML = `<div class="toolbar"><div class="title-row"><h2>Connections</h2>${info('Links to systems outside this system. None is switched on yet; each note says how the work is done in the meantime and what the connection needs.', 'Connections')}</div></div>
         <div class="panel"><ul class="conn">${C.map(([name, what, how], i) => `<li><div><strong>${esc(name)}</strong> ${info(how, name)}<br><span class="muted">${esc(what)}</span></div><span class="tag ${i === 4 ? 'tag-ok' : 'tag-plain'}">${i === 4 ? 'Works now' : 'Not connected'}</span></li>`).join('')}</ul></div>
-        ${api.mode === 'server' && isAdmin ? `<div class="toolbar"><div class="title-row"><h2>Service keys</h2>${info('A service key lets another program use Deme as if it were a person with one role: a scanner app at the gate, a camera\'s edge box posting inspection results, or the Tally bridge reading vouchers. The program sends the key in the Authorization header as "Bearer" followed by the key, and calls the same actions people use. The key is shown once; if it is lost, switch it off and make a new one.', 'Service keys')}</div><div class="spacer"></div></div>
+        ${api.mode === 'server' && isAdmin ? `<div class="toolbar"><div class="title-row"><h2>Service keys</h2>${info('A service key lets another program use the system as if it were a person with one role: a scanner app at the gate, a camera\'s edge box posting inspection results, or the Tally bridge reading vouchers. The program sends the key in the Authorization header as "Bearer" followed by the key, and calls the same actions people use. The key is shown once; if it is lost, switch it off and make a new one.', 'Service keys')}</div><div class="spacer"></div></div>
         <div class="panel panel-pad stack" id="keysBox"><p class="faint">Loading</p></div>` : ''}`;
       if (api.mode === 'server' && isAdmin) renderKeys();
     }

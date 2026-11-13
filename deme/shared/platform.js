@@ -7,7 +7,7 @@
 // from the same code.
 
 import { ENTITIES, MODULES, entityById } from './schema.js';
-import { DEFAULT_CENTRES } from './org.js';
+import { DEFAULT_CENTRES, POSITIONS } from './org.js';
 
 // The built-in lists and areas as they were written. Copied once, so they stay whole whatever a browser does to the shared ones.
 const BASE_ENTITIES = Object.freeze([...ENTITIES]), BASE_MODULES = Object.freeze({ ...MODULES });
@@ -63,6 +63,36 @@ export const templateById = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
 export function settingsFrom(templateId, name) {
   const t = templateById[templateId] || templateById.apparel;
   return { name: String(name || '').trim() || 'My business', template: t.id, modules: [...t.modules], packs: [...t.packs], terms: structuredClone(t.terms), ai: { provider: 'platform' } };
+}
+
+/**
+ * Every built-in area, as it was written: for the screen where a business switches areas on.
+ * `lists` are the names of the lists the area brings; lists that belong to a trade pack are left
+ * out here and reported by builtInPacks(). Core areas are always on.
+ */
+export function builtInAreas() {
+  return Object.entries(BASE_MODULES).map(([id, m]) => ({ id, name: m.name, info: m.info, core: CORE.includes(id), lists: BASE_ENTITIES.filter((e) => e.module === id && !e.pack).map((e) => e.name) }));
+}
+/** The trade packs a business can switch on: the lists each brings, the areas those lists sit in, and how many fields it adds to other lists. */
+export function builtInPacks() {
+  const ids = [...new Set(BASE_ENTITIES.flatMap((e) => [e.pack, ...e.fields.map((f) => f[3]?.pack)]).filter(Boolean))];
+  return ids.map((id) => {
+    const own = BASE_ENTITIES.filter((e) => e.pack === id);
+    return { id, lists: own.map((e) => e.name), areas: [...new Set(own.map((e) => e.module))], fields: BASE_ENTITIES.reduce((n, e) => n + (e.pack === id ? 0 : e.fields.filter((f) => f[3]?.pack === id).length), 0) };
+  });
+}
+/** Every built-in list under its built-in name, whatever a business has renamed it to: { id, area, name, one, pack }. */
+export function builtInLists() {
+  return BASE_ENTITIES.map((e) => ({ id: e.id, area: e.module, name: e.name, one: e.one, pack: e.pack || '' }));
+}
+/**
+ * The positions a business can offer: those that sit in a work centre it has (matched on the
+ * centre's `key`), and the general ones that belong to no work centre. `centres` is the list of
+ * work centre records.
+ */
+export function positionsFor(centres) {
+  const keys = new Set((centres || []).map((c) => c.key).filter(Boolean));
+  return POSITIONS.filter((p) => !p.centre || keys.has(p.centre));
 }
 
 const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);

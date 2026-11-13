@@ -1,4 +1,4 @@
-// Deme Intelligence as one Node process: serves the web app and the API, with data in a SQLite
+// Hyper Lychee Labs ERP as one Node process: serves the web app and the API, with data in a SQLite
 // file. No dependencies beyond Node 22. Configure with environment variables (see .env.example).
 // The same API also runs on Netlify over Postgres: see netlify/functions/api.mjs.
 
@@ -76,6 +76,6 @@ export function createApp({ dbFile = process.env.DEME_DB || join(root, 'data', '
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT || 8800);
   const app = createApp();
-  app.server.listen(port, () => console.log(`Deme Intelligence is running on http://localhost:${port}`));
+  app.server.listen(port, () => console.log(`Hyper Lychee Labs ERP is running on http://localhost:${port}`));
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { app.close(); process.exit(0); });
 }

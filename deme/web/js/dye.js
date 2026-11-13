@@ -1,7 +1,7 @@
 // Dye house: built for a phone held in one hand. The lots that are out for dyeing and the fabric
 // the mill delivered straight there; tap one to report a problem with photos. An outside dye-house
 // login cannot read any list, so everything here comes from what `fabric.myLots` returns and from
-// what this phone has sent. Deme's own people also pass or inspect waiting rolls and see the reports.
+// what this phone has sent. the business's own people also pass or inspect waiting rolls and see the reports.
 
 import { api, data } from './api.js';
 import { $, esc, info, toast, busy, num, fmtDate, fmtStamp, statusTag } from './ui.js';

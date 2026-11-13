@@ -8,8 +8,8 @@ import { S, opt } from './defs.js';
 import { FUNCTIONS, POSITIONS } from './org.js';
 import { PACK_ENTITIES } from './packs.js';
 
-export const COMPANY = 'Deme';
-export const PRODUCT = 'Deme Intelligence';
+export const COMPANY = 'The business';
+export const PRODUCT = 'Hyper Lychee Labs ERP';
 export const STAGES = ['cut', 'stitch', 'finish', 'qc', 'pack'];
 export const STAGE_NAMES = { cut: 'Cutting', stitch: 'Stitching', finish: 'Finishing', qc: 'Final QC', pack: 'Packing' };
 export const INSPECTION_PASS_MARK = 40;
@@ -46,7 +46,7 @@ export const MODULES = {
 };
 
 const ALL = (lvl) => Object.fromEntries(Object.keys(MODULES).map((m) => [m, lvl]));
-// From the access plan the Deme team drew up for their ERP evaluation.
+// From the access plan the first customer drew up for their ERP evaluation.
 export const ROLES = {
   admin: { name: 'System admin', perms: ALL('admin') },
   founder: { name: 'Founder / CEO', perms: ALL('admin') },
@@ -96,7 +96,7 @@ export const ENTITIES = [
       ['rfd', 'Ready for dyeing (RFD)', 'bool', { hint: 'Fabric that goes from the mill straight to the dye house', pack: 'apparel' }], ['cost', 'Cost per unit', 'money', {}], ['dyeCost', 'Dyeing cost per metre', 'money', { hint: 'Fabric only', pack: 'apparel' }], ['minLevel', 'Minimum level', 'number', { list: true }],
       ['onHand', 'On hand', 'number', { ro: true, list: true }], ['location', 'Kept at', 'text', {}]] },
   { id: 'styles', module: 'masters', name: 'Styles', one: 'Style', title: 'name', open: true,   // everyone needs the names to follow and place orders; prices and the bill of materials stay with those who work on them
-    info: 'Each garment Deme makes. Standard minutes per piece at each stage drive the production plan, and the fabric and thread per piece drive material checks. Bundle scans show how far real minutes are from these.',
+    info: 'Each garment the business makes. Standard minutes per piece at each stage drive the production plan, and the fabric and thread per piece drive material checks. Bundle scans show how far real minutes are from these.',
     fields: [['code', 'Style code', 'text', { req: true, list: true }], ['name', 'Name', 'text', { req: true, list: true }], ['collection', 'Collection', 'ref', { ref: 'collections' }],
       ['fabric', 'Main fabric', 'ref', { ref: 'items', list: true, pack: 'apparel' }], ['shade', 'Shade', 'text', { list: true, pack: 'apparel' }], ['metres', 'Fabric per piece (m)', 'number', { pack: 'apparel' }], ['cones', 'Thread cones per 100 pieces', 'number', { pack: 'apparel' }],
       ['smvCut', 'Cutting minutes', 'number', { req: true, pack: 'apparel' }], ['smvStitch', 'Stitching minutes', 'number', { req: true, list: true, pack: 'apparel' }], ['smvFinish', 'Finishing minutes', 'number', { req: true, pack: 'apparel' }], ['smvQc', 'QC minutes', 'number', { req: true, pack: 'apparel' }], ['smvPack', 'Packing minutes', 'number', { req: true, pack: 'apparel' }],
@@ -108,11 +108,11 @@ export const ENTITIES = [
     fields: [['name', 'Name', 'text', { req: true, list: true }], ['kind', 'Kind', 'select', { req: true, list: true, options: opt(['mill', 'Fabric mill'], ['dyer', 'Dye house'], ['trims', 'Thread and trims'], ['maker', 'Production vendor'], ['courier', 'Courier'], ['other', 'Other']) }],
       ['city', 'City', 'text', { list: true }], ['contact', 'Contact person', 'text', { list: true }], ['phone', 'Phone', 'text', {}], ['email', 'Email', 'text', {}], ['gstin', 'GSTIN', 'text', {}], ['terms', 'Payment terms (days)', 'number', { def: 30 }], ['ledger', 'Tally ledger name', 'text', {}]] },
   { id: 'customers', module: 'masters', name: 'Customers', one: 'Customer', title: 'name',
-    info: 'Wholesale accounts and Deme\'s own store. Online shoppers are not kept here; they stay on the Shopify order.',
+    info: 'Wholesale accounts and your own store. Online shoppers are not kept here; they stay on the Shopify order.',
     fields: [['name', 'Name', 'text', { req: true, list: true }], ['kind', 'Kind', 'select', { req: true, list: true, options: opt(['b2b', 'B2B account'], ['store', 'Own store'], ['other', 'Other']) }],
       ['country', 'Country', 'text', { list: true }], ['currency', 'Currency', 'select', { def: 'INR', list: true, options: opt('INR', 'USD', 'GBP', 'EUR', 'AED', 'AUD') }], ['contact', 'Contact person', 'text', {}], ['email', 'Email', 'text', {}], ['terms', 'Payment terms (days)', 'number', { def: 30 }], ['ledger', 'Tally ledger name', 'text', {}]] },
   { id: 'work_centres', module: 'masters', name: 'Work centres', one: 'Work centre', title: 'name', level: 'admin', open: true,
-    info: 'A part of the business with one person in charge: Production, Merchandising, Design, Finance. People belong to a work centre, tasks can be addressed to one, and its head confirms who joins it. A starting set is created at setup; rename, add or remove as Deme is actually organised.',
+    info: 'A part of the business with one person in charge: Production, Merchandising, Design, Finance. People belong to a work centre, tasks can be addressed to one, and its head confirms who joins it. A starting set is created at setup; rename, add or remove as the business is actually organised.',
     fields: [['name', 'Name', 'text', { req: true, list: true }], ['head', 'Person in charge', 'user', { list: true }], ['about', 'What it does', 'long', {}], ['key', 'Key', 'text', { ro: true }]] },
   { id: 'workstations', module: 'masters', name: 'Workstations', one: 'Workstation', title: 'name', level: 'admin', headVia: 'centre', open: true,
     info: 'A place inside a work centre where one kind of work is done: the cutting table, a stitching line, the inspection table, the dispatch gate. For production workstations, people × shift minutes × efficiency gives the standard minutes a day the production plan schedules against. The head of a work centre can add and change its workstations.',
@@ -133,10 +133,10 @@ export const ENTITIES = [
       ['total', 'Total', 'money', { ro: true, list: true }], ['notes', 'Notes', 'long', {}], ['requestedBy', 'Raised by', 'user', { ro: true }]],
     actions: [{ id: 'po.approve', label: 'Approve', when: ['draft'], level: 'admin' }, { id: 'po.send', label: 'Mark as sent', when: ['approved'] }, { id: 'po.cancel', label: 'Cancel', when: ['draft', 'approved', 'sent'], level: 'admin' }] },
   { id: 'goods_receipts', module: 'purchasing', name: 'Goods receipts', one: 'Goods receipt', no: 'GRN', title: 'no',
-    info: 'Record what actually arrived, and where. Ready-for-dyeing fabric usually goes from the mill straight to the dye house: choose the dye house and the rolls are created there, to be checked by Deme\'s person at the dye house or accepted on the mill\'s QC report. Other fabric comes to the store. Posting creates the rolls, adds other materials to stock, opens the supplier bill and writes the purchase voucher.',
+    info: 'Record what actually arrived, and where. Ready-for-dyeing fabric usually goes from the mill straight to the dye house: choose the dye house and the rolls are created there, to be checked by your own person at the dye house or accepted on the mill\'s QC report. Other fabric comes to the store. Posting creates the rolls, adds other materials to stock, opens the supplier bill and writes the purchase voucher.',
     statuses: S(['draft', 'Draft'], ['posted', 'Posted', 'ok']),
     fields: [['po', 'Purchase order', 'ref', { ref: 'purchase_orders', list: true }], ['supplier', 'Supplier', 'ref', { ref: 'suppliers', req: true, list: true }], ['date', 'Received on', 'date', { def: 'today', list: true }], ['invoiceNo', 'Supplier invoice no.', 'text', {}],
-      ['deliveredTo', 'Delivered to', 'select', { def: 'store', list: true, options: opt(['store', 'Deme fabric store'], ['dyer', 'Dye house, straight from the mill']) }], ['dyer', 'Which dye house', 'ref', { ref: 'suppliers', filter: { kind: 'dyer' }, hint: 'Only when delivered to a dye house' }],
+      ['deliveredTo', 'Delivered to', 'select', { def: 'store', list: true, options: opt(['store', 'Own fabric store'], ['dyer', 'Dye house, straight from the mill']) }], ['dyer', 'Which dye house', 'ref', { ref: 'suppliers', filter: { kind: 'dyer' }, hint: 'Only when delivered to a dye house' }],
       ['millReport', 'Mill QC report', 'select', { def: 'none', options: opt(['none', 'Not received'], ['ok', 'Received']) }], ['millHeld', 'Metres the mill held back', 'number', { hint: 'Rolls the mill rejected itself and did not send' }],
       ['lines', 'Lines', 'lines', { req: true, cols: [['item', 'Material', 'ref', { ref: 'items' }], ['qty', 'Quantity', 'number', {}], ['rolls', 'Rolls (fabric)', 'number', {}], ['rate', 'Rate', 'money', {}]] }],
       ['total', 'Total', 'money', { ro: true, list: true }]],
@@ -150,7 +150,7 @@ export const ENTITIES = [
     fields: [['item', 'Fabric', 'ref', { ref: 'items', req: true, list: true }], ['supplier', 'Supplier', 'ref', { ref: 'suppliers', list: true }], ['metres', 'Metres', 'number', { req: true, list: true }], ['shade', 'Shade', 'text', { list: true }],
       ['location', 'Location', 'text', { list: true }], ['receivedOn', 'Received on', 'date', { def: 'today' }], ['grn', 'Goods receipt', 'ref', { ref: 'goods_receipts', ro: true }], ['points', 'Inspection points', 'number', { ro: true }], ['defects', 'Defects', 'text', { ro: true }],
       ['dyeLot', 'Dye lot', 'ref', { ref: 'dye_lots', ro: true }], ['reservedFor', 'Reserved for', 'ref', { ref: 'work_orders', list: true }],
-      ['left', 'Metres left', 'number', { ro: true, list: true }], ['heldAt', 'Lying at', 'ref', { ref: 'suppliers', ro: true }], ['checkedBy', 'Checked by', 'select', { ro: true, options: opt(['mill', 'Mill QC report'], ['dyehouse', 'Deme, at the dye house'], ['store', 'Deme, at the store']) }], ['reason', 'Reason', 'select', { ro: true, options: FABRIC_REASONS }]],
+      ['left', 'Metres left', 'number', { ro: true, list: true }], ['heldAt', 'Lying at', 'ref', { ref: 'suppliers', ro: true }], ['checkedBy', 'Checked by', 'select', { ro: true, options: opt(['mill', 'Mill QC report'], ['dyehouse', 'Own check, at the dye house'], ['store', 'Own check, at the store']) }], ['reason', 'Reason', 'select', { ro: true, options: FABRIC_REASONS }]],
     actions: [{ id: 'roll.inspect', label: 'Inspect', when: ['received'], module: 'quality', form: [['points', 'Penalty points per 100 sq yd', 'number', { req: true }], ['reason', 'Main reason, if it fails', 'select', { options: FABRIC_REASONS }], ['defects', 'Defects seen', 'text', {}]] },
       { id: 'roll.accept', label: 'Accept on the mill\'s report', when: ['received'], module: 'quality' },
       { id: 'roll.return', label: 'Return to mill', when: ['rejected'] }, { id: 'roll.issue', label: 'Issue to cutting', when: ['dyed', 'passed'], form: [['workOrder', 'Work order', 'ref', { ref: 'work_orders', req: true }]] }] },
@@ -195,11 +195,11 @@ export const ENTITIES = [
 
   // ── Production ──
   { id: 'work_orders', module: 'production', name: 'Work orders', one: 'Work order', no: 'WO', title: 'no',
-    info: 'One style, one quantity, one due date. Progress is recorded per stage; a stage can never be ahead of the one before it. Work orders are raised from sales orders, Shopify lots, store orders or sample requests. Wholesale work can be sent to a production vendor: bulk to one, difficult pieces to another. Vendor work is checked either in-house when it comes back, or at the vendor by Deme\'s own QC and shipped from there. Vendor work does not take in-house capacity in the plan.',
+    info: 'One style, one quantity, one due date. Progress is recorded per stage; a stage can never be ahead of the one before it. Work orders are raised from sales orders, Shopify lots, store orders or sample requests. Wholesale work can be sent to a production vendor: bulk to one, difficult pieces to another. Vendor work is checked either in-house when it comes back, or at the vendor by your own QC and shipped from there. Vendor work does not take in-house capacity in the plan.',
     statuses: S(['planned', 'Planned'], ['released', 'Released', 'info'], ['in_progress', 'In progress', 'info'], ['at_vendor', 'With the vendor', 'info'], ['done', 'Done', 'ok'], ['hold', 'On hold', 'warn']), initial: 'planned',
     fields: [['channel', 'For', 'select', { req: true, list: true, options: opt(['B2B', 'B2B'], ['D2C', 'Shopify'], ['STORE', 'Store'], ['SAMPLE', 'Sample']) }], ['customer', 'Customer', 'ref', { ref: 'customers', list: true }], ['style', 'Style', 'ref', { ref: 'styles', req: true, list: true }],
       ['qty', 'Pieces', 'number', { req: true, list: true }], ['due', 'Due', 'date', { req: true, list: true }], ['source', 'Raised from', 'text', { ro: true }],
-      ['madeBy', 'Made', 'select', { def: 'inhouse', list: true, options: opt(['inhouse', 'In-house'], ['vendor', 'By a production vendor']) }], ['vendor', 'Vendor', 'ref', { ref: 'suppliers', filter: { kind: 'maker' }, list: true }], ['qcAt', 'Checked', 'select', { def: 'inhouse', hint: 'Vendor work only', options: opt(['inhouse', 'In-house, when it comes back'], ['vendor', 'At the vendor by Deme\'s QC, shipped from there']) }], ['sentOn', 'Sent to vendor', 'date', { ro: true }], ['backBy', 'Due back from vendor', 'date', {}],
+      ['madeBy', 'Made', 'select', { def: 'inhouse', list: true, options: opt(['inhouse', 'In-house'], ['vendor', 'By a production vendor']) }], ['vendor', 'Vendor', 'ref', { ref: 'suppliers', filter: { kind: 'maker' }, list: true }], ['qcAt', 'Checked', 'select', { def: 'inhouse', hint: 'Vendor work only', options: opt(['inhouse', 'In-house, when it comes back'], ['vendor', 'At the vendor by the business\'s QC, shipped from there']) }], ['sentOn', 'Sent to vendor', 'date', { ro: true }], ['backBy', 'Due back from vendor', 'date', {}],
       ['cut', 'Cut', 'number', { ro: true }], ['stitch', 'Stitched', 'number', { ro: true }], ['finish', 'Finished', 'number', { ro: true }], ['qc', 'Passed QC', 'number', { ro: true }], ['pack', 'Packed', 'number', { ro: true, list: true }], ['notes', 'Notes', 'long', {}]],
     actions: [{ id: 'wo.release', label: 'Release to floor', when: ['planned', 'hold'] }, { id: 'wo.hold', label: 'Put on hold', when: ['released', 'in_progress'] },
       { id: 'wo.sendOut', label: 'Send to vendor', when: ['planned'], form: [['vendor', 'Vendor', 'ref', { ref: 'suppliers', filter: { kind: 'maker' }, req: true }], ['qcAt', 'Checked', 'select', { def: 'inhouse', options: opt(['inhouse', 'In-house, when it comes back'], ['vendor', 'At the vendor, shipped from there']) }], ['backBy', 'Due back or due to ship', 'date', {}]] },
@@ -257,7 +257,7 @@ export const ENTITIES = [
       ['style', 'Style', 'ref', { ref: 'styles', list: true }], ['size', 'Size', 'text', {}], ['qty', 'Pieces', 'number', { def: 1 }], ['currency', 'Currency', 'select', { def: 'INR', options: opt(...CURRENCIES) }], ['amountInr', 'In rupees', 'money', { ro: true }], ['channel', 'Came from', 'text', { ro: true, list: true }], ['campaign', 'Campaign', 'text', { ro: true }], ['items', 'Items', 'text', { ro: true }], ['amount', 'Amount', 'money', { list: true }], ['awb', 'Tracking no.', 'text', {}]],
     actions: [{ id: 'shop.pack', label: 'Pack and create parcel', when: ['new', 'in_production'], form: [['awb', 'Tracking barcode on the label', 'text', { req: true }], ['carrier', 'Carrier', 'ref', { ref: 'suppliers' }]] }, { id: 'shop.cancel', label: 'Cancel', when: ['new', 'in_production'] }] },
   { id: 'store_orders', module: 'b2c', name: 'Store orders', one: 'Store order', no: 'ST', title: 'no',
-    info: 'Orders and alterations from Deme\'s own store. Each time a piece comes back for fit, it is scanned in at the gate and the visit is counted on the order.',
+    info: 'Orders and alterations from your own store. Each time a piece comes back for fit, it is scanned in at the gate and the visit is counted on the order.',
     statuses: S(['open', 'Open', 'info'], ['at_factory', 'At the factory', 'warn'], ['at_store', 'At the store', 'ok'], ['closed', 'Closed']), initial: 'open',
     fields: [['date', 'Date', 'date', { def: 'today', list: true }], ['customerName', 'Customer', 'text', { list: true }], ['style', 'Style', 'ref', { ref: 'styles', req: true, list: true }], ['size', 'Size', 'text', {}], ['amount', 'Amount', 'money', {}], ['tag', 'Piece tag (barcode)', 'text', { req: true, list: true }],
       ['visits', 'Fit visits', 'number', { ro: true, list: true }], ['notes', 'Notes', 'long', {}]],
@@ -273,7 +273,7 @@ export const ENTITIES = [
 
   // ── Logistics ──
   { id: 'parcels', module: 'logistics', name: 'Parcels', one: 'Parcel', no: 'PCL', title: 'no', alsoWrite: ['b2c', 'b2b'],
-    info: 'Anything that leaves or comes back: Shopify parcels, export cartons, store pieces. The barcode is the courier\'s tracking barcode on the air waybill, or Deme\'s own tag for store pieces. The office adds the paperwork: e-invoice number, invoice value and, above ₹50,000, the e-way bill number, with the documents attached. The factory prints them, attaches them and scans the parcel out. A parcel with its paperwork missing is stopped at the gate.',
+    info: 'Anything that leaves or comes back: Shopify parcels, export cartons, store pieces. The barcode is the courier\'s tracking barcode on the air waybill, or your own tag for store pieces. The office adds the paperwork: e-invoice number, invoice value and, above ₹50,000, the e-way bill number, with the documents attached. The factory prints them, attaches them and scans the parcel out. A parcel with its paperwork missing is stopped at the gate.',
     statuses: S(['packed', 'Packed, not scanned', 'warn'], ['in_transit', 'In transit', 'info'], ['delivered', 'Delivered', 'ok'], ['returning', 'Coming back', 'warn'], ['at_factory', 'At the factory', 'info'], ['at_store', 'At the store', 'ok']), initial: 'packed',
     fields: [['kind', 'Kind', 'select', { req: true, list: true, options: opt(['shopify', 'Shopify parcel'], ['b2b', 'B2B cartons'], ['store', 'Store piece']) }], ['ref', 'Order', 'text', { req: true, list: true }], ['barcode', 'Barcode', 'text', { req: true, list: true }], ['carrier', 'Carrier', 'ref', { ref: 'suppliers', list: true }],
       ['dest', 'Going to', 'text', { list: true }], ['cartons', 'Cartons', 'number', { def: 1 }], ['weight', 'Weight (kg)', 'number', {}],
@@ -297,7 +297,7 @@ export const ENTITIES = [
       ['dr', 'Debit ledger', 'text', { req: true, list: true }], ['cr', 'Credit ledger', 'text', { req: true, list: true }], ['amount', 'Amount (₹)', 'money', { req: true, list: true }], ['narration', 'Narration', 'long', {}], ['ref', 'Source', 'text', { list: true }]],
     actions: [{ id: 'voucher.synced', label: 'Mark as in Tally', when: ['open'] }] },
   { id: 'bills', module: 'finance', name: 'Supplier bills', one: 'Supplier bill', no: 'BILL', title: 'no',
-    info: 'What Deme owes. Bills open themselves when a receipt is posted, a dye lot is received or a courier invoice is approved. Paying one writes the payment voucher.',
+    info: 'What the business owes. Bills open themselves when a receipt is posted, a dye lot is received or a courier invoice is approved. Paying one writes the payment voucher.',
     statuses: S(['unpaid', 'Unpaid', 'warn'], ['part_paid', 'Part paid', 'warn'], ['paid', 'Paid', 'ok']), initial: 'unpaid',
     fields: [['supplier', 'Supplier', 'ref', { ref: 'suppliers', req: true, list: true }], ['date', 'Date', 'date', { def: 'today', list: true }], ['due', 'Due', 'date', { list: true }], ['ref', 'For', 'text', { list: true }], ['amount', 'Amount', 'money', { req: true, list: true }], ['paid', 'Paid', 'money', { ro: true, list: true }]],
     actions: [{ id: 'bill.pay', label: 'Record payment', when: ['unpaid', 'part_paid'], form: [['amount', 'Amount paid', 'money', { req: true }], ['bank', 'From bank ledger', 'ref', { ref: 'ledgers' }]] }] },
@@ -365,7 +365,7 @@ export const ENTITIES = [
 
   // ── Money in other currencies ──
   { id: 'fx_rates', module: 'finance', name: 'Exchange rates', one: 'Exchange rate', title: 'currency',
-    info: 'Rupees for one unit of each currency Deme sells in. The newest rate on or before a document\'s date is used to state online orders, ad spend and wholesale invoices in rupees. Add a rate when it moves enough to matter; an invoice can still carry its own rate.',
+    info: 'Rupees for one unit of each currency the business sells in. The newest rate on or before a document\'s date is used to state online orders, ad spend and wholesale invoices in rupees. Add a rate when it moves enough to matter; an invoice can still carry its own rate.',
     fields: [['currency', 'Currency', 'select', { req: true, list: true, options: opt(...CURRENCIES.filter((c) => c !== 'INR')) }], ['rate', 'Rupees per unit', 'number', { req: true, list: true }], ['date', 'From', 'date', { def: 'today', req: true, list: true }]] },
 
   // ── Marketing ──

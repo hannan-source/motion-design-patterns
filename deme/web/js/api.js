@@ -170,7 +170,7 @@ export const api = {
     if (mode === 'server') { const res = await fetch(`/api/export/tally?ids=${ids.join(',')}`, { credentials: 'same-origin' }); if (!res.ok) throw new Error('Could not build the export.'); return res.text(); }
     const { vouchersToTallyXML } = await import('../shared/tally.js');
     const vs = data.all('vouchers').filter((v) => (ids.length ? ids.includes(v.id) : v.status === 'open'));
-    return vouchersToTallyXML(vs.map((v) => ({ ...v, id: v.no })), 'Deme');
+    return vouchersToTallyXML(vs.map((v) => ({ ...v, id: v.no })), data.workspace?.name || 'Company');
   },
   /** Ask the server's AI which record type and fields a spreadsheet's columns belong to (server only). */
   aiMap: (body) => http('POST', 'ai/map', body),

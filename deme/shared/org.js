@@ -27,7 +27,7 @@ export const POSITIONS = [
   { id: 'design', name: 'Designer', line: 'Develops each style from sketch to approved sample.', role: 'design', centre: 'design', approve: 'head', guide: 'everyone' },
   { id: 'stores', name: 'Stores, inward and outward', line: 'Receives, tags, stores and issues every roll and material, and moves dye lots.', role: 'stores', centre: 'stores', approve: 'head', guide: 'stores' },
   { id: 'runner', name: 'Fabric runner and bundler', line: 'Brings each master exactly the fabric for the day\'s cut, from the bundling list.', role: 'stores', centre: 'stores', approve: 'head', guide: 'stores' },
-  { id: 'dyecheck', name: 'Dye house checker', line: 'Deme\'s own person at the dye house: checks fabric before and after dyeing.', role: 'qc', centre: 'stores', approve: 'head', guide: 'qc' },
+  { id: 'dyecheck', name: 'Dye house checker', line: 'your own person at the dye house: checks fabric before and after dyeing.', role: 'qc', centre: 'stores', approve: 'head', guide: 'qc' },
   { id: 'dyehouse', name: 'Dye house (outside)', line: 'The dye house itself: reports a problem on a lot with a photo. Sees nothing else.', role: 'dyer', centre: 'stores', approve: 'admin', guide: 'everyone' },
   { id: 'qc', name: 'QC head', line: 'Inspects fabric, checks shade after dyeing, logs garment checks.', role: 'qc', centre: 'stores', approve: 'head', guide: 'qc' },
   { id: 'dispatch', name: 'E-com dispatch checker', line: 'Packs online orders, labels parcels, scans everything through the gate.', role: 'dispatch', centre: 'dispatch', approve: 'head', guide: 'dispatch' },

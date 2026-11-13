@@ -24,7 +24,7 @@ export function mount(el, ctx) {
   el.innerHTML = `
     <div class="workspace work"><div class="workspace-inner">
       <div class="view-head">
-        <div class="title-row"><h1 class="reveal">Dispatch gate</h1>${info('A handheld scanner or a camera reader types into this box and presses Enter. The barcode is the courier\'s tracking barcode on the label, or Deme\'s own tag on store pieces.', 'Dispatch gate')}</div>
+        <div class="title-row"><h1 class="reveal">Dispatch gate</h1>${info('A handheld scanner or a camera reader types into this box and presses Enter. The barcode is the courier\'s tracking barcode on the label, or your own tag on store pieces.', 'Dispatch gate')}</div>
       </div>
       <div class="gt-cols${reads ? '' : ' is-one'}">
         <div class="gt-col">

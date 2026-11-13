@@ -27,7 +27,7 @@ const ABOUT = {
   materials: 'Free dyed fabric in the store is used first. If passed, undyed fabric covers the rest, it has to be dyed before cutting. Otherwise new fabric has to be bought, inspected and dyed, and more people cannot bring that date forward. Sample runs are taken to cut from sample yardage already in the room, so fabric does not hold up their start. The lead times come from the planning assumptions.',
   timeline: 'Each bar runs from first cut to last piece packed, in working days, Monday to Saturday. The upright marker is the due date and a red hatched length is time past it. A grey hatched start means the order is waiting for fabric. While a change is being tested, a thin grey line shows where the order was before.',
   load: 'The share of each work centre\'s standard minutes the plan uses in each week. Darker means busier. A ringed cell is a week with no spare minutes. Arrows mark a change of 3 points or more against the current plan. Every order starts as early as it can, so the busy weeks come first.',
-  assume: 'These are Deme\'s own planning numbers, not records from the ERP. They set how long a sample takes against a production piece, how long dyeing and new fabric take, and what overtime, hiring and outside stitching cost. They are saved on this device only. Change one and the plan is worked out again.',
+  assume: 'These are your own planning numbers, not records from the ERP. They set how long a sample takes against a production piece, how long dyeing and new fabric take, and what overtime, hiring and outside stitching cost. They are saved on this device only. Change one and the plan is worked out again.',
 };
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const days = (n) => plural(n, 'working day');

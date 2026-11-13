@@ -282,7 +282,7 @@ export const ACTIONS = {
     run(ctx, payload, doc) {
       const failed = [...new Set(Array.isArray(payload.failed) ? payload.failed : [])];
       const note = payload.note || '';
-      // Whose fault a failure is decides where the cost goes: the mill, the dye house, or Deme.
+      // Whose fault a failure is decides where the cost goes: the mill, the dye house, or the business itself.
       const fault = ['mill', 'dyer'].includes(payload.fault) ? payload.fault : 'none';
       const bad = [];
       for (const id of failed) if (!(doc.rolls || []).includes(id)) ctx.fail(`Roll ${ctx.title('rolls', id) || id} is not on this dye lot. Choose the failed rolls from this lot only.`);
